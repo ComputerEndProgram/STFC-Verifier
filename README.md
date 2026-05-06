@@ -1,4 +1,4 @@
-# STFC Rank Bot - Quick Start Guide
+# STFC-Verifier
 
 ## What Was Built
 
@@ -25,7 +25,7 @@ I've expanded your rank-fetch scraper into a complete Discord bot for managing a
 
 ### 1. Copy and Configure Environment
 ```bash
-cd ~/rank-fetch
+cd STFC-Verifier
 cp .env.example .env
 nano .env  # Edit with your values
 ```
