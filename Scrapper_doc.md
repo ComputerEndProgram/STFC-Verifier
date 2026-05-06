@@ -13,13 +13,13 @@ This project contains an enhanced STFC player data scraper that extracts allianc
 ### Original Scraper (Veil-Bot)
 - ✅ Extracted player data from metadata tags only (title, description)
 - ✅ Retrieved: player_id, username, level, alliance_tag, server
-- ✅ Did NOT extract player rank (Agent, Operative, Commodore, Admiral)
+- ✅ Did NOT extract player rank (Agent, Operative, Premier, Commodore, Admiral)
 
 ### Enhanced Scraper (rank-fetch)
 - ✅ All original functionality preserved
 - ✅ **NEW: Extracts player rank** from HTML body using regex pattern
 - ✅ **NEW: Handles players without alliance tags** (makes alliance_tag optional)
-- ✅ Rank field in PlayerData: `Optional[str]` with possible values: `Agent`, `Operative`, `Commodore`, `Admiral`
+- ✅ Rank field in PlayerData: `Optional[str]` with possible values: `Agent`, `Operative`, `Premier`, `Commodore`, `Admiral`
 
 ## Key Changes
 
@@ -42,7 +42,7 @@ rank: Optional[str] = None           # NEW: Player rank
 ```
 
 ### 2. Rank Extraction
-Added regex pattern to extract rank from HTML body (including Premier):
+Added regex pattern to extract rank from HTML body:
 ```python
 rank_match = re.search(r'>(Agent|Operative|Premier|Commodore|Admiral)</span>', response.text)
 rank = rank_match.group(1) if rank_match else None
