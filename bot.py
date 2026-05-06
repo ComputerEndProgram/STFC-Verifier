@@ -225,6 +225,37 @@ class RankConfirmationView(ui.View):
 
         if self.confirmed:
             log.info(f"[CONFIRM] Admin ACCEPTED rank change for {member.name}: {self.rank}")
+            # Assign roles based on rank
+            member_role = guild.get_role(MEMBER_ROLE_ID)
+            commodore_role = guild.get_role(COMMODORE_ROLE_ID)
+            admiral_role = guild.get_role(ADMIRAL_ROLE_ID)
+            
+            rank_tier = get_rank_tier(self.rank)
+            
+            try:
+                if rank_tier == "commodore":
+                    # Assign both member and commodore roles
+                    if member_role:
+                        await member.add_roles(member_role, reason=f"Confirmed rank: {self.rank}")
+                    if commodore_role:
+                        await member.add_roles(commodore_role, reason=f"Confirmed rank: {self.rank}")
+                    # Remove admiral if they had it
+                    if admiral_role and admiral_role in member.roles:
+                        await member.remove_roles(admiral_role, reason="Rank downgrade")
+                    log.info(f"[CONFIRM] Assigned member + commodore roles to {member.name}")
+                    
+                elif rank_tier == "admiral":
+                    # Assign both member and admiral roles
+                    if member_role:
+                        await member.add_roles(member_role, reason=f"Confirmed rank: {self.rank}")
+                    if admiral_role:
+                        await member.add_roles(admiral_role, reason=f"Confirmed rank: {self.rank}")
+                    # Remove commodore if they had it
+                    if commodore_role and commodore_role in member.roles:
+                        await member.remove_roles(commodore_role, reason="Rank promotion")
+                    log.info(f"[CONFIRM] Assigned member + admiral roles to {member.name}")
+            except Exception as e:
+                log.error(f"[CONFIRM] Error assigning roles: {e}")
         else:
             log.info(f"[CONFIRM] Admin REJECTED rank change for {member.name}: {self.rank}")
 
@@ -327,50 +358,24 @@ class STFCRankBot(commands.Bot):
                 log.info(f"[RANK] Assigned base role to {member.name} (rank: {player_data.rank})")
 
             elif rank_tier == "commodore":
-                # Commodore/Admiral need confirmation on update, immediate on initial verify
-                if request_confirmation:
-                    # This is an update, request confirmation
-                    return RankConfirmationView(
-                        member.id,
-                        member.name,
-                        player_data.rank,
-                        player_data.username,
-                        player_data.alliance_tag or "N/A",
-                    )
-                else:
-                    # Initial verification - assign immediately
-                    if commodore_role:
-                        await member.add_roles(commodore_role, reason=f"Rank: {player_data.rank}")
-                        # Remove member role if they have it (they're promoted)
-                        if member_role in member.roles:
-                            await member.remove_roles(member_role, reason="Rank promotion")
-                        # Assign alliance role if enabled
-                        await self._assign_alliance_role(member, player_data.alliance_tag)
-                        log.info(f"[RANK] Assigned commodore role to {member.name}")
-                    return None
+                # Commodore/Admiral always need confirmation before assigning
+                return RankConfirmationView(
+                    member.id,
+                    member.name,
+                    player_data.rank,
+                    player_data.username,
+                    player_data.alliance_tag or "N/A",
+                )
 
             elif rank_tier == "admiral":
-                # Same as commodore
-                if request_confirmation:
-                    return RankConfirmationView(
-                        member.id,
-                        member.name,
-                        player_data.rank,
-                        player_data.username,
-                        player_data.alliance_tag or "N/A",
-                    )
-                else:
-                    if admiral_role:
-                        await member.add_roles(admiral_role, reason=f"Rank: {player_data.rank}")
-                        # Remove lower roles
-                        if member_role in member.roles:
-                            await member.remove_roles(member_role, reason="Rank promotion")
-                        if commodore_role and commodore_role in member.roles:
-                            await member.remove_roles(commodore_role, reason="Rank promotion")
-                        # Assign alliance role if enabled
-                        await self._assign_alliance_role(member, player_data.alliance_tag)
-                        log.info(f"[RANK] Assigned admiral role to {member.name}")
-                    return None
+                # Same as commodore - always request confirmation
+                return RankConfirmationView(
+                    member.id,
+                    member.name,
+                    player_data.rank,
+                    player_data.username,
+                    player_data.alliance_tag or "N/A",
+                )
 
         except discord.Forbidden:
             log.error(f"[RANK] No permission to assign roles to {member.name}")
