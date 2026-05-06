@@ -171,5 +171,3 @@ The bot is built to be extensible. You can:
 - Add more rank tiers by modifying `RANK_TIERS` in `bot.py`
 - Add more confirmation logic in `_assign_ranks()` method
 - Customize embed messages and colors
-
-Enjoy your rank management bot! 🚀
