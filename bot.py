@@ -199,6 +199,8 @@ class RankConfirmationView(ui.View):
         self.player_name = player_name
         self.alliance_tag = alliance_tag
         self.confirmed = None
+        self.user_message = None  # Store user's pending message to edit later
+        self.log_message = None  # Store log message to edit after confirmation
 
     @ui.button(label="✅ Accept", style=discord.ButtonStyle.green, custom_id="rank_accept")
     async def accept_button(self, interaction: discord.Interaction, button: ui.Button):
@@ -206,6 +208,16 @@ class RankConfirmationView(ui.View):
         self.confirmed = True
         await interaction.response.defer()
         await self.on_confirmation(interaction.guild)
+        # Edit the log message to remove buttons and show confirmation
+        if self.log_message:
+            try:
+                embed = self.log_message.embeds[0] if self.log_message.embeds else None
+                if embed:
+                    embed.color = discord.Color.green()
+                    embed.title = "✅ Rank Confirmation - ACCEPTED"
+                    await self.log_message.edit(embed=embed, view=None)
+            except Exception as e:
+                log.warning(f"[CONFIRM] Could not edit log message: {e}")
         self.stop()
 
     @ui.button(label="❌ Reject", style=discord.ButtonStyle.red, custom_id="rank_reject")
@@ -214,6 +226,16 @@ class RankConfirmationView(ui.View):
         self.confirmed = False
         await interaction.response.defer()
         await self.on_confirmation(interaction.guild)
+        # Edit the log message to remove buttons and show rejection
+        if self.log_message:
+            try:
+                embed = self.log_message.embeds[0] if self.log_message.embeds else None
+                if embed:
+                    embed.color = discord.Color.red()
+                    embed.title = "❌ Rank Confirmation - REJECTED"
+                    await self.log_message.edit(embed=embed, view=None)
+            except Exception as e:
+                log.warning(f"[CONFIRM] Could not edit log message: {e}")
         self.stop()
 
     async def on_confirmation(self, guild: discord.Guild):
@@ -256,8 +278,34 @@ class RankConfirmationView(ui.View):
                     log.info(f"[CONFIRM] Assigned member + admiral roles to {member.name}")
             except Exception as e:
                 log.error(f"[CONFIRM] Error assigning roles: {e}")
+            
+            # Edit the user's message to show confirmation
+            if self.user_message:
+                try:
+                    embed = discord.Embed(
+                        title="✅ Verification Successful",
+                        description=f"Welcome, **{self.player_name}**! Your rank has been confirmed by admins.",
+                        color=discord.Color.green(),
+                    )
+                    embed.add_field(name="Rank", value=self.rank, inline=True)
+                    embed.add_field(name="Alliance", value=f"[{self.alliance_tag}]" if self.alliance_tag != "N/A" else "N/A", inline=True)
+                    await self.user_message.edit(embed=embed)
+                except Exception as e:
+                    log.warning(f"[CONFIRM] Could not edit user message: {e}")
         else:
             log.info(f"[CONFIRM] Admin REJECTED rank change for {member.name}: {self.rank}")
+            
+            # Edit the user's message to show rejection
+            if self.user_message:
+                try:
+                    embed = discord.Embed(
+                        title="❌ Verification Rejected",
+                        description=f"Your rank promotion to {self.rank} was rejected by admins.",
+                        color=discord.Color.red(),
+                    )
+                    await self.user_message.edit(embed=embed)
+                except Exception as e:
+                    log.warning(f"[CONFIRM] Could not edit user message: {e}")
 
 
 # ---------------------------------------------------------------------------
@@ -387,23 +435,25 @@ class STFCRankBot(commands.Bot):
         return None
 
     async def post_to_log_channel(self, embed: discord.Embed = None, file: discord.File = None, view: ui.View = None):
-        """Post an embed to the log channel."""
+        """Post an embed to the log channel. Returns the sent message or None."""
         if not LOG_CHANNEL_ID:
-            return
+            return None
 
         guild = self.get_guild(GUILD_ID)
         if not guild:
-            return
+            return None
 
         log_ch = guild.get_channel(LOG_CHANNEL_ID)
         if not log_ch:
             log.warning(f"[LOG] Log channel {LOG_CHANNEL_ID} not found")
-            return
+            return None
 
         try:
-            await log_ch.send(embed=embed, file=file, view=view)
+            message = await log_ch.send(embed=embed, file=file, view=view)
+            return message
         except Exception as e:
             log.warning(f"[LOG] Could not send to log channel: {e}")
+            return None
 
     @tasks.loop(hours=1)
     async def update_stfc_ranks(self):
@@ -562,18 +612,36 @@ def setup_commands(bot: STFCRankBot):
         # Assign ranks (base role immediate, higher ranks need confirmation)
         confirmation_view = await bot._assign_ranks(member, player_data, request_confirmation=False)
 
-        # Success response
-        embed = discord.Embed(
-            title="✅ Verification Successful",
-            description=f"Welcome, **{player_data.username}**!",
-            color=discord.Color.green(),
-        )
-        alliance_display = f"[{player_data.alliance_tag}]" if player_data.alliance_tag else "N/A"
-        embed.add_field(name="Alliance", value=alliance_display, inline=True)
-        embed.add_field(name="Rank", value=player_data.rank or "N/A", inline=True)
-        embed.add_field(name="Level", value=str(player_data.level), inline=True)
-        embed.add_field(name="Server", value=str(player_data.server), inline=True)
-        await interaction.followup.send(embed=embed)
+        # Show different message based on whether confirmation is needed
+        if confirmation_view:
+            # Leadership rank - send pending message
+            embed = discord.Embed(
+                title="⏳ Verification Pending",
+                description=f"Welcome, **{player_data.username}**! Your rank is being reviewed by admins.",
+                color=discord.Color.orange(),
+            )
+            alliance_display = f"[{player_data.alliance_tag}]" if player_data.alliance_tag else "N/A"
+            embed.add_field(name="Alliance", value=alliance_display, inline=True)
+            embed.add_field(name="Rank", value=player_data.rank or "N/A", inline=True)
+            embed.add_field(name="Level", value=str(player_data.level), inline=True)
+            embed.add_field(name="Server", value=str(player_data.server), inline=True)
+            embed.add_field(name="Status", value="⏳ Awaiting admin confirmation...", inline=False)
+            user_message = await interaction.followup.send(embed=embed)
+            # Store message reference so we can edit it later
+            confirmation_view.user_message = user_message
+        else:
+            # Base rank - send success message immediately
+            embed = discord.Embed(
+                title="✅ Verification Successful",
+                description=f"Welcome, **{player_data.username}**!",
+                color=discord.Color.green(),
+            )
+            alliance_display = f"[{player_data.alliance_tag}]" if player_data.alliance_tag else "N/A"
+            embed.add_field(name="Alliance", value=alliance_display, inline=True)
+            embed.add_field(name="Rank", value=player_data.rank or "N/A", inline=True)
+            embed.add_field(name="Level", value=str(player_data.level), inline=True)
+            embed.add_field(name="Server", value=str(player_data.server), inline=True)
+            await interaction.followup.send(embed=embed)
 
         # Log verification with screenshot
         log_embed = discord.Embed(
@@ -582,6 +650,7 @@ def setup_commands(bot: STFCRankBot):
             color=discord.Color.blue(),
             timestamp=datetime.now(timezone.utc),
         )
+        alliance_display = f"[{player_data.alliance_tag}]" if player_data.alliance_tag else "N/A"
         log_embed.add_field(name="Alliance", value=alliance_display, inline=True)
         log_embed.add_field(name="Rank", value=player_data.rank or "N/A", inline=True)
         log_embed.add_field(name="Server", value=str(player_data.server), inline=True)
@@ -598,8 +667,12 @@ def setup_commands(bot: STFCRankBot):
             )
             confirm_embed.add_field(name="Player", value=f"{member.mention} ({player_data.username})", inline=False)
             confirm_embed.add_field(name="Rank", value=player_data.rank, inline=True)
+            alliance_display = f"[{player_data.alliance_tag}]" if player_data.alliance_tag else "N/A"
             confirm_embed.add_field(name="Alliance", value=alliance_display, inline=True)
-            await bot.post_to_log_channel(embed=confirm_embed, view=confirmation_view)
+            log_message = await bot.post_to_log_channel(embed=confirm_embed, view=confirmation_view)
+            # Store log message reference so we can edit it later
+            if log_message:
+                confirmation_view.log_message = log_message
 
 
 # ---------------------------------------------------------------------------
