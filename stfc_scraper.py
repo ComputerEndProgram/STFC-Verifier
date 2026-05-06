@@ -32,23 +32,25 @@ class PlayerData:
 
 
 class STFCProScraper:
-    """Scrapes player data from stfc.pro or stfc.wtf."""
+    """Scrapes player data from stfc.pro, stfc.wtf, or stfc.live."""
     
     BASE_URL_PRO = "https://stfc.pro/players"
     BASE_URL_WTF = "https://stfc.wtf/players"
+    BASE_URL_LIVE = "https://stfc.live/players"
     TIMEOUT = 10
     
     @staticmethod
     def extract_player_id_from_url(url: str) -> Optional[str]:
-        """Extract player ID from a stfc.pro or stfc.wtf URL.
+        """Extract player ID from a stfc.pro, stfc.wtf, or stfc.live URL.
         
         Examples:
             https://stfc.pro/players/2659122580 → 2659122580
             https://stfc.wtf/players/2659122580 → 2659122580
+            https://stfc.live/players/2659122580 → 2659122580
             2659122580 → 2659122580
         """
-        # Try to extract from full URL (supports both .pro and .wtf)
-        match = re.search(r"stfc\.(pro|wtf)/players/(\d+)", url)
+        # Try to extract from full URL (supports .pro, .wtf, and .live)
+        match = re.search(r"stfc\.(pro|wtf|live)/players/(\d+)", url)
         if match:
             return match.group(2)
         
@@ -60,15 +62,15 @@ class STFCProScraper:
     
     @staticmethod
     def fetch_player_data(player_id: str) -> Optional[PlayerData]:
-        """Fetch player data from stfc.pro or stfc.wtf.
+        """Fetch player data from stfc.pro, stfc.wtf, or stfc.live.
         
-        Tries stfc.pro first, then falls back to stfc.wtf if needed.
+        Tries stfc.pro first, then stfc.wtf, then stfc.live as fallback.
         
         Returns:
             PlayerData object if successful, None if not found or error.
         """
-        # Try both URLs
-        for base_url in [STFCProScraper.BASE_URL_PRO, STFCProScraper.BASE_URL_WTF]:
+        # Try all URLs in order
+        for base_url in [STFCProScraper.BASE_URL_PRO, STFCProScraper.BASE_URL_WTF, STFCProScraper.BASE_URL_LIVE]:
             url = f"{base_url}/{player_id}"
             
             try:
@@ -135,8 +137,8 @@ class STFCProScraper:
                 rank=rank,
             )
         
-        # Both URLs failed
-        log.warning(f"Could not fetch player data for {player_id} from stfc.pro or stfc.wtf")
+        # All URLs failed
+        log.warning(f"Could not fetch player data for {player_id} from stfc.pro, stfc.wtf, or stfc.live")
         return None
 
 
