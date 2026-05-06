@@ -262,21 +262,26 @@ class STFCRankBot(commands.Bot):
     async def _assign_alliance_role(self, member: discord.Member, alliance_tag: Optional[str]):
         """Optionally assign alliance role based on tag name.
         
-        If ENABLE_ALLIANCE_ROLES is true and a role with the alliance tag name exists,
-        assign it to the member. Otherwise, do nothing.
+        If ENABLE_ALLIANCE_ROLES is true:
+        - If user has alliance tag, find and assign role matching the tag
+        - If user has no alliance tag, assign "N/A" role if it exists
+        Otherwise, do nothing.
         """
-        if not ENABLE_ALLIANCE_ROLES or not alliance_tag:
+        if not ENABLE_ALLIANCE_ROLES:
             return
+
+        # Determine which role to assign
+        role_name = alliance_tag if alliance_tag else "N/A"
 
         try:
             # Find role by name (case-sensitive to match Discord role creation)
-            alliance_role = discord.utils.get(member.guild.roles, name=alliance_tag)
+            alliance_role = discord.utils.get(member.guild.roles, name=role_name)
             
             if alliance_role:
-                await member.add_roles(alliance_role, reason=f"Alliance: {alliance_tag}")
-                log.info(f"[ALLIANCE] Assigned alliance role '{alliance_tag}' to {member.name}")
+                await member.add_roles(alliance_role, reason=f"Alliance: {role_name}")
+                log.info(f"[ALLIANCE] Assigned alliance role '{role_name}' to {member.name}")
             else:
-                log.debug(f"[ALLIANCE] Role '{alliance_tag}' not found for {member.name}")
+                log.debug(f"[ALLIANCE] Role '{role_name}' not found for {member.name}")
 
         except discord.Forbidden:
             log.warning(f"[ALLIANCE] No permission to assign alliance role to {member.name}")
@@ -434,16 +439,6 @@ class STFCRankBot(commands.Bot):
             await interaction.followup.send(embed=embed)
             return
 
-        # Verify alliance tag exists
-        if not player_data.alliance_tag:
-            embed = discord.Embed(
-                title="❌ No Alliance",
-                description="You must be in an alliance to verify. Please join an alliance and try again.",
-                color=discord.Color.red(),
-            )
-            await interaction.followup.send(embed=embed)
-            return
-
         # Get member
         member = interaction.user
         if not isinstance(member, discord.Member):
@@ -478,7 +473,8 @@ class STFCRankBot(commands.Bot):
             description=f"Welcome, **{player_data.username}**!",
             color=discord.Color.green(),
         )
-        embed.add_field(name="Alliance", value=f"[{player_data.alliance_tag}]", inline=True)
+        alliance_display = f"[{player_data.alliance_tag}]" if player_data.alliance_tag else "N/A"
+        embed.add_field(name="Alliance", value=alliance_display, inline=True)
         embed.add_field(name="Rank", value=player_data.rank or "N/A", inline=True)
         embed.add_field(name="Level", value=str(player_data.level), inline=True)
         embed.add_field(name="Server", value=str(player_data.server), inline=True)
@@ -491,7 +487,7 @@ class STFCRankBot(commands.Bot):
             color=discord.Color.blue(),
             timestamp=datetime.now(timezone.utc),
         )
-        log_embed.add_field(name="Alliance", value=f"[{player_data.alliance_tag}]", inline=True)
+        log_embed.add_field(name="Alliance", value=alliance_display, inline=True)
         log_embed.add_field(name="Rank", value=player_data.rank or "N/A", inline=True)
         log_embed.add_field(name="Server", value=str(player_data.server), inline=True)
         log_embed.set_image(url=screenshot_url)
@@ -507,7 +503,7 @@ class STFCRankBot(commands.Bot):
             )
             confirm_embed.add_field(name="Player", value=f"{member.mention} ({player_data.username})", inline=False)
             confirm_embed.add_field(name="Rank", value=player_data.rank, inline=True)
-            confirm_embed.add_field(name="Alliance", value=f"[{player_data.alliance_tag}]", inline=True)
+            confirm_embed.add_field(name="Alliance", value=alliance_display, inline=True)
             await self.post_to_log_channel(embed=confirm_embed, view=confirmation_view)
 
     @tasks.loop(hours=1)
@@ -568,6 +564,7 @@ class STFCRankBot(commands.Bot):
                     # Post confirmation request if needed
                     if confirmation_view:
                         admin_ping = f"<@&{ADMIN_ROLE_ID}>" if ADMIN_ROLE_ID else "Admins"
+                        alliance_display = f"[{player_data.alliance_tag}]" if player_data.alliance_tag else "N/A"
                         confirm_embed = discord.Embed(
                             title="🔔 Rank Change Detected - Confirmation Required",
                             description=f"{admin_ping}, please confirm this rank change.",
@@ -576,7 +573,7 @@ class STFCRankBot(commands.Bot):
                         confirm_embed.add_field(name="Player", value=f"{member.mention} ({player_data.username})", inline=False)
                         confirm_embed.add_field(name="Previous Rank", value=old_rank or "N/A", inline=True)
                         confirm_embed.add_field(name="New Rank", value=new_rank or "N/A", inline=True)
-                        confirm_embed.add_field(name="Alliance", value=f"[{player_data.alliance_tag}]", inline=True)
+                        confirm_embed.add_field(name="Alliance", value=alliance_display, inline=True)
                         await self.post_to_log_channel(embed=confirm_embed, view=confirmation_view)
 
             except Exception as e:
