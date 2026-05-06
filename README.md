@@ -57,7 +57,7 @@ Get their IDs by right-clicking → Copy Role ID
 3. Go to Bot section, click Add Bot
 4. Copy the TOKEN to `.env` as `DISCORD_TOKEN`
 5. Go to OAuth2 → URL Generator
-6. Select scopes: `bot`
+6. Select scopes: `bot`, `applications.commands`
 7. Select permissions: `Send Messages`, `Manage Nicknames`, `Manage Roles`, `Read Message History`
 8. Copy generated URL and use to invite bot to your server
 
