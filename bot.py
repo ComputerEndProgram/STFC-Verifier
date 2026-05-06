@@ -81,12 +81,13 @@ ADMIN_ROLE_ID = _env_int("ADMIN_ROLE_ID", required=False, default=0)
 
 UPDATE_CHECK_HOURS = int(os.getenv("UPDATE_CHECK_HOURS", "24"))
 DB_PATH = os.getenv("DB_PATH", "stfc_players.db")
+ENABLE_ALLIANCE_ROLES = os.getenv("ENABLE_ALLIANCE_ROLES", "0") not in ("0", "", "false", "False", "no", "No")
 
 log.info(
     "Config: GUILD=%s STFC_SERVER=%s MEMBER_ROLE=%s COMMODORE_ROLE=%s ADMIRAL_ROLE=%s "
-    "ADMIN_ROLE=%s VERIFY_CH=%s LOG_CH=%s UPDATE_CHECK=%sh",
+    "ADMIN_ROLE=%s VERIFY_CH=%s LOG_CH=%s UPDATE_CHECK=%sh ALLIANCE_ROLES=%s",
     GUILD_ID, STFC_SERVER_ID, MEMBER_ROLE_ID, COMMODORE_ROLE_ID, ADMIRAL_ROLE_ID,
-    ADMIN_ROLE_ID, VERIFY_CHANNEL_ID, LOG_CHANNEL_ID, UPDATE_CHECK_HOURS,
+    ADMIN_ROLE_ID, VERIFY_CHANNEL_ID, LOG_CHANNEL_ID, UPDATE_CHECK_HOURS, ENABLE_ALLIANCE_ROLES,
 )
 
 
@@ -258,6 +259,30 @@ class STFCRankBot(commands.Bot):
             return f"[{alliance_tag}] {username}"
         return username
 
+    async def _assign_alliance_role(self, member: discord.Member, alliance_tag: Optional[str]):
+        """Optionally assign alliance role based on tag name.
+        
+        If ENABLE_ALLIANCE_ROLES is true and a role with the alliance tag name exists,
+        assign it to the member. Otherwise, do nothing.
+        """
+        if not ENABLE_ALLIANCE_ROLES or not alliance_tag:
+            return
+
+        try:
+            # Find role by name (case-sensitive to match Discord role creation)
+            alliance_role = discord.utils.get(member.guild.roles, name=alliance_tag)
+            
+            if alliance_role:
+                await member.add_roles(alliance_role, reason=f"Alliance: {alliance_tag}")
+                log.info(f"[ALLIANCE] Assigned alliance role '{alliance_tag}' to {member.name}")
+            else:
+                log.debug(f"[ALLIANCE] Role '{alliance_tag}' not found for {member.name}")
+
+        except discord.Forbidden:
+            log.warning(f"[ALLIANCE] No permission to assign alliance role to {member.name}")
+        except Exception as e:
+            log.error(f"[ALLIANCE] Error assigning alliance role to {member.name}: {e}")
+
     async def _assign_ranks(
         self,
         member: discord.Member,
@@ -292,6 +317,8 @@ class STFCRankBot(commands.Bot):
                     await member.remove_roles(commodore_role, reason="Rank downgrade")
                 if admiral_role and admiral_role in member.roles:
                     await member.remove_roles(admiral_role, reason="Rank downgrade")
+                # Assign alliance role if enabled
+                await self._assign_alliance_role(member, player_data.alliance_tag)
                 log.info(f"[RANK] Assigned base role to {member.name} (rank: {player_data.rank})")
 
             elif rank_tier == "commodore":
@@ -312,6 +339,8 @@ class STFCRankBot(commands.Bot):
                         # Remove member role if they have it (they're promoted)
                         if member_role in member.roles:
                             await member.remove_roles(member_role, reason="Rank promotion")
+                        # Assign alliance role if enabled
+                        await self._assign_alliance_role(member, player_data.alliance_tag)
                         log.info(f"[RANK] Assigned commodore role to {member.name}")
                     return None
 
@@ -333,6 +362,8 @@ class STFCRankBot(commands.Bot):
                             await member.remove_roles(member_role, reason="Rank promotion")
                         if commodore_role and commodore_role in member.roles:
                             await member.remove_roles(commodore_role, reason="Rank promotion")
+                        # Assign alliance role if enabled
+                        await self._assign_alliance_role(member, player_data.alliance_tag)
                         log.info(f"[RANK] Assigned admiral role to {member.name}")
                     return None
 
