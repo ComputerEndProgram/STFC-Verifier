@@ -400,112 +400,6 @@ class STFCRankBot(commands.Bot):
         except Exception as e:
             log.warning(f"[LOG] Could not send to log channel: {e}")
 
-    @app_commands.command(
-        name="verify",
-        description="Verify your STFC player account with alliance rank"
-    )
-    @app_commands.describe(
-        player_url="Your stfc.pro/stfc.wtf player URL or player ID",
-        screenshot="Screenshot of your player profile (for verification logging)"
-    )
-    async def verify_command(
-        self,
-        interaction: discord.Interaction,
-        player_url: str,
-        screenshot: discord.Attachment,
-    ):
-        """Verify STFC player account."""
-        await interaction.response.defer(thinking=True)
-
-        # Extract player ID from URL or use directly
-        player_id = STFCProScraper.extract_player_id_from_url(player_url)
-        if not player_id:
-            await interaction.followup.send("❌ Invalid player URL or ID format.")
-            return
-
-        # Fetch player data
-        player_data = STFCProScraper.fetch_player_data(player_id)
-        if not player_data:
-            await interaction.followup.send("❌ Could not fetch player data. Check the URL/ID and try again.")
-            return
-
-        # Verify server matches
-        if player_data.server != STFC_SERVER_ID:
-            embed = discord.Embed(
-                title="❌ Wrong Server",
-                description=f"Your player is on server **{player_data.server}** but this server is for **{STFC_SERVER_ID}**.",
-                color=discord.Color.red(),
-            )
-            await interaction.followup.send(embed=embed)
-            return
-
-        # Get member
-        member = interaction.user
-        if not isinstance(member, discord.Member):
-            await interaction.followup.send("❌ Could not get your member profile.")
-            return
-
-        # Update nickname
-        new_nick = self._build_nickname(player_data.alliance_tag, player_data.username)
-        try:
-            await member.edit(nick=new_nick, reason="STFC Verification")
-            log.info(f"[VERIFY] Updated nickname for {member.name}: {new_nick}")
-        except discord.Forbidden:
-            log.warning(f"[VERIFY] Could not update nickname for {member.name}")
-
-        # Download screenshot
-        screenshot_url = screenshot.url
-        try:
-            await screenshot.save(f"screenshots/{member.id}_{player_id}.png")
-            log.info(f"[VERIFY] Saved screenshot for {member.name}")
-        except Exception as e:
-            log.warning(f"[VERIFY] Could not save screenshot: {e}")
-
-        # Store player data
-        store.store_stfc_player(member.id, player_data, screenshot_url)
-
-        # Assign ranks (base role immediate, higher ranks need confirmation)
-        confirmation_view = await self._assign_ranks(member, player_data, request_confirmation=False)
-
-        # Success response
-        embed = discord.Embed(
-            title="✅ Verification Successful",
-            description=f"Welcome, **{player_data.username}**!",
-            color=discord.Color.green(),
-        )
-        alliance_display = f"[{player_data.alliance_tag}]" if player_data.alliance_tag else "N/A"
-        embed.add_field(name="Alliance", value=alliance_display, inline=True)
-        embed.add_field(name="Rank", value=player_data.rank or "N/A", inline=True)
-        embed.add_field(name="Level", value=str(player_data.level), inline=True)
-        embed.add_field(name="Server", value=str(player_data.server), inline=True)
-        await interaction.followup.send(embed=embed)
-
-        # Log verification with screenshot
-        log_embed = discord.Embed(
-            title="📋 Player Verified",
-            description=f"{member.mention} has verified as **{player_data.username}**",
-            color=discord.Color.blue(),
-            timestamp=datetime.now(timezone.utc),
-        )
-        log_embed.add_field(name="Alliance", value=alliance_display, inline=True)
-        log_embed.add_field(name="Rank", value=player_data.rank or "N/A", inline=True)
-        log_embed.add_field(name="Server", value=str(player_data.server), inline=True)
-        log_embed.set_image(url=screenshot_url)
-        await self.post_to_log_channel(embed=log_embed)
-
-        # If rank requires confirmation, post confirmation request
-        if confirmation_view:
-            admin_ping = f"<@&{ADMIN_ROLE_ID}>" if ADMIN_ROLE_ID else "Admins"
-            confirm_embed = discord.Embed(
-                title="🔔 Rank Confirmation Required",
-                description=f"{admin_ping}, please confirm this rank promotion.",
-                color=discord.Color.orange(),
-            )
-            confirm_embed.add_field(name="Player", value=f"{member.mention} ({player_data.username})", inline=False)
-            confirm_embed.add_field(name="Rank", value=player_data.rank, inline=True)
-            confirm_embed.add_field(name="Alliance", value=alliance_display, inline=True)
-            await self.post_to_log_channel(embed=confirm_embed, view=confirmation_view)
-
     @tasks.loop(hours=1)
     async def update_stfc_ranks(self):
         """Periodically check for rank changes and request admin confirmation."""
@@ -591,6 +485,119 @@ class STFCRankBot(commands.Bot):
 
 
 # ---------------------------------------------------------------------------
+# Commands (Registered after bot instantiation)
+# ---------------------------------------------------------------------------
+def setup_commands(bot: STFCRankBot):
+    """Register slash commands with the bot."""
+
+    @bot.tree.command(
+        name="verify",
+        description="Verify your STFC player account with alliance rank",
+        guild=discord.Object(GUILD_ID),
+    )
+    @app_commands.describe(
+        player_url="Your stfc.pro/stfc.wtf/stfc.live player URL or player ID",
+        screenshot="Screenshot of your player profile (for verification logging)"
+    )
+    async def verify_command(
+        interaction: discord.Interaction,
+        player_url: str,
+        screenshot: discord.Attachment,
+    ):
+        """Verify STFC player account."""
+        await interaction.response.defer(thinking=True)
+
+        # Extract player ID from URL or use directly
+        player_id = STFCProScraper.extract_player_id_from_url(player_url)
+        if not player_id:
+            await interaction.followup.send("❌ Invalid player URL or ID format.")
+            return
+
+        # Fetch player data
+        player_data = STFCProScraper.fetch_player_data(player_id)
+        if not player_data:
+            await interaction.followup.send("❌ Could not fetch player data. Check the URL/ID and try again.")
+            return
+
+        # Verify server matches
+        if player_data.server != STFC_SERVER_ID:
+            embed = discord.Embed(
+                title="❌ Wrong Server",
+                description=f"Your player is on server **{player_data.server}** but this server is for **{STFC_SERVER_ID}**.",
+                color=discord.Color.red(),
+            )
+            await interaction.followup.send(embed=embed)
+            return
+
+        # Get member
+        member = interaction.user
+        if not isinstance(member, discord.Member):
+            await interaction.followup.send("❌ Could not get your member profile.")
+            return
+
+        # Update nickname
+        new_nick = bot._build_nickname(player_data.alliance_tag, player_data.username)
+        try:
+            await member.edit(nick=new_nick, reason="STFC Verification")
+            log.info(f"[VERIFY] Updated nickname for {member.name}: {new_nick}")
+        except discord.Forbidden:
+            log.warning(f"[VERIFY] Could not update nickname for {member.name}")
+
+        # Download screenshot
+        screenshot_url = screenshot.url
+        try:
+            await screenshot.save(f"screenshots/{member.id}_{player_id}.png")
+            log.info(f"[VERIFY] Saved screenshot for {member.name}")
+        except Exception as e:
+            log.warning(f"[VERIFY] Could not save screenshot: {e}")
+
+        # Store player data
+        store.store_stfc_player(member.id, player_data, screenshot_url)
+
+        # Assign ranks (base role immediate, higher ranks need confirmation)
+        confirmation_view = await bot._assign_ranks(member, player_data, request_confirmation=False)
+
+        # Success response
+        embed = discord.Embed(
+            title="✅ Verification Successful",
+            description=f"Welcome, **{player_data.username}**!",
+            color=discord.Color.green(),
+        )
+        alliance_display = f"[{player_data.alliance_tag}]" if player_data.alliance_tag else "N/A"
+        embed.add_field(name="Alliance", value=alliance_display, inline=True)
+        embed.add_field(name="Rank", value=player_data.rank or "N/A", inline=True)
+        embed.add_field(name="Level", value=str(player_data.level), inline=True)
+        embed.add_field(name="Server", value=str(player_data.server), inline=True)
+        await interaction.followup.send(embed=embed)
+
+        # Log verification with screenshot
+        log_embed = discord.Embed(
+            title="📋 Player Verified",
+            description=f"{member.mention} has verified as **{player_data.username}**",
+            color=discord.Color.blue(),
+            timestamp=datetime.now(timezone.utc),
+        )
+        log_embed.add_field(name="Alliance", value=alliance_display, inline=True)
+        log_embed.add_field(name="Rank", value=player_data.rank or "N/A", inline=True)
+        log_embed.add_field(name="Server", value=str(player_data.server), inline=True)
+        log_embed.set_image(url=screenshot_url)
+        await bot.post_to_log_channel(embed=log_embed)
+
+        # If rank requires confirmation, post confirmation request
+        if confirmation_view:
+            admin_ping = f"<@&{ADMIN_ROLE_ID}>" if ADMIN_ROLE_ID else "Admins"
+            confirm_embed = discord.Embed(
+                title="🔔 Rank Confirmation Required",
+                description=f"{admin_ping}, please confirm this rank promotion.",
+                color=discord.Color.orange(),
+            )
+            confirm_embed.add_field(name="Player", value=f"{member.mention} ({player_data.username})", inline=False)
+            confirm_embed.add_field(name="Rank", value=player_data.rank, inline=True)
+            confirm_embed.add_field(name="Alliance", value=alliance_display, inline=True)
+            await bot.post_to_log_channel(embed=confirm_embed, view=confirmation_view)
+
+
+# ---------------------------------------------------------------------------
 # Main
 # ---------------------------------------------------------------------------
 if __name__ == "__main__":
@@ -598,4 +605,5 @@ if __name__ == "__main__":
     os.makedirs("screenshots", exist_ok=True)
 
     bot = STFCRankBot()
+    setup_commands(bot)
     bot.run(DISCORD_TOKEN)
