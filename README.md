@@ -2,7 +2,7 @@
 
 ## What Was Built
 
-I've expanded your rank-fetch scraper into a complete Discord bot for managing alliance ranks in your STFC server. The bot:
+The bot:
 
 ✅ Fetches player data including **Premier rank** support (newly added)  
 ✅ Verifies players are on your specific STFC server  
