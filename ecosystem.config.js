@@ -1,13 +1,16 @@
 module.exports = {
   apps: [
     {
-      name: "dtb-verifier",
-      script: "/home/ubuntu/.local/bin/dtb-verifier",
-      cwd: "/home/ubuntu/DTB-Verifier-new",
+      name: "verifier",
+      script: "/home/ubuntu/.local/bin/verifier",
+      cwd: "/home/ubuntu/Merged-Verifier",
       interpreter: "/usr/bin/python3.13",
-      env: {
-        BOT_PROFILE: "stfc_verifier_alliance",
-      },
+    },
+    {
+      name: "verifier-admin-web",
+      script: "/usr/bin/python3.13",
+      args: "-m admin_web",
+      cwd: "/home/ubuntu/Merged-Verifier",
     },
   ],
 };

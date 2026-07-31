@@ -1,0 +1,38 @@
+{% extends "base.html" %}
+{% block content %}
+{% if guilds | length == 0 %}
+  <section class="lcars-section">
+    <div class="lcars-text-bar lcars-text-bar--a6">Directory</div>
+    <div class="lcars-section-body">
+      <p>
+        No accessible servers. Invite the bot and run <code>/setup</code>, or ensure
+        you have Manage Server / Administrator permission on a server the bot is in.
+      </p>
+    </div>
+  </section>
+{% else %}
+  <section class="lcars-section">
+    <div class="lcars-text-bar lcars-text-bar--a5">Accessible · {{ guilds | length }}</div>
+    <div class="lcars-section-body">
+      <ul class="guild-list">
+        {% for guild in guilds %}
+          <li>
+            <a class="guild-link" href="/guilds/{{ guild.id }}">
+              <span class="guild-link-body">
+                <strong>{{ guild.name }}</strong>
+                <span class="muted">
+                  {% if guild.configured %}
+                    {{ guild.profile }} · configured
+                  {% else %}
+                    Not configured
+                  {% endif %}
+                </span>
+              </span>
+            </a>
+          </li>
+        {% endfor %}
+      </ul>
+    </div>
+  </section>
+{% endif %}
+{% endblock %}

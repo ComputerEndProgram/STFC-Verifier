@@ -1,0 +1,105 @@
+{% extends "base.html" %}
+{% block content %}
+
+{% if saved %}
+  <p class="lcars-flash">Config saved — live on the bot</p>
+{% endif %}
+{% if form_error %}
+  <p class="lcars-flash lcars-flash--error">{{ form_error }}</p>
+{% endif %}
+
+{% if not config and not form_error %}
+  <div class="lcars-alert">
+    This server is not configured yet. The bot is present but has no active
+    configuration. Fill in the form below and save.
+  </div>
+{% endif %}
+
+<section class="lcars-section">
+  <div class="lcars-text-bar lcars-text-bar--a8">Current configuration</div>
+  <div class="lcars-section-body">
+    {% if config %}
+      {% for group in groups %}
+        <dl class="lcars-defs">
+          {% for f in group.fields %}
+            <li>
+              <dt>{{ f.label }}</dt>
+              <dd class="{{ 'muted' if f.kind != 'checkbox' and not values[f.name] and f.name != 'bot_profile' else '' }}">
+                {% if f.name == 'bot_profile' %}
+                  {{ profile_label or values[f.name] }}
+                {% elif f.kind == 'checkbox' %}
+                  {{ 'On' if values[f.name] else 'Off' }}
+                {% elif values[f.name] %}
+                  {{ values[f.name] }}
+                {% else %}
+                  —
+                {% endif %}
+              </dd>
+            </li>
+          {% endfor %}
+        </dl>
+      {% endfor %}
+    {% else %}
+      <p class="muted">Nothing saved yet — use the form below to configure this server.</p>
+    {% endif %}
+  </div>
+</section>
+
+<section class="lcars-section">
+  <div class="lcars-text-bar lcars-text-bar--a1">Edit config</div>
+  <div class="lcars-section-body">
+    <p class="muted tiny">
+      Fields are shared with the <code>/setup</code> slash command. Changes apply to the
+      running bot immediately — no restart required.
+    </p>
+    <form class="form" method="post" action="/guilds/{{ guild_id }}/config">
+      <input type="hidden" name="csrf_token" value="{{ csrf_token }}" />
+      {% for group in groups %}
+        <div style="margin: 0.25rem 0 0.6rem">
+          <h2>{{ group.label }}</h2>
+          {% for f in group.fields %}
+            {% if f.kind == 'select' %}
+              <label>
+                {{ f.label }}
+                <select name="{{ f.name }}">
+                  {% for opt in f.options %}
+                    <option value="{{ opt.value }}" {% if values[f.name] == opt.value %}selected{% endif %}>{{ opt.label }}</option>
+                  {% endfor %}
+                </select>
+                {% if f.note %}<span class="lcars-hint">{{ f.note }}</span>{% endif %}
+              </label>
+            {% elif f.kind == 'checkbox' %}
+              <label class="check">
+                <input type="checkbox" name="{{ f.name }}" {% if values[f.name] %}checked{% endif %} />
+                {{ f.label }}
+              </label>
+              {% if f.note %}<span class="lcars-hint">{{ f.note }}</span>{% endif %}
+            {% elif f.kind == 'number' %}
+              <label>
+                {{ f.label }}
+                <input type="number" name="{{ f.name }}" min="0" value="{{ values[f.name] or '' }}" />
+                {% if f.note %}<span class="lcars-hint">{{ f.note }}</span>{% endif %}
+              </label>
+            {% else %}
+              <label>
+                {{ f.label }}
+                <input
+                  type="text"
+                  name="{{ f.name }}"
+                  inputmode="numeric"
+                  pattern="[0-9]*"
+                  autocomplete="off"
+                  value="{{ values[f.name] or '' }}"
+                />
+                {% if f.note %}<span class="lcars-hint">{{ f.note }}</span>{% endif %}
+              </label>
+            {% endif %}
+          {% endfor %}
+        </div>
+      {% endfor %}
+      <button type="submit" class="lcars-pill">Save config</button>
+    </form>
+  </div>
+</section>
+
+{% endblock %}

@@ -11,6 +11,8 @@ dependencies = [
   "requests",
   "opencv-python-headless",
   "numpy",
+  "fastapi",
+  "uvicorn",
 ]
 
 [project.optional-dependencies]
@@ -19,13 +21,15 @@ dev = [
 ]
 
 [project.scripts]
-dtb-verifier = "bot.main:main"
+verifier = "bot.main:main"
+verifier-admin-web = "admin_web.__main__:main"
 
 [tool.setuptools.packages.find]
-include = ["bot*"]
+include = ["bot*", "admin_web*"]
 
 [tool.setuptools.package-data]
 "bot.i18n" = ["*.json"]
+"admin_web" = ["static/*.css", "templates/*.html"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]

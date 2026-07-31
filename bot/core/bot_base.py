@@ -6,13 +6,14 @@ import logging
 import os
 import pathlib
 import sqlite3
-from abc import ABC, abstractmethod
 from datetime import datetime
 from typing import Optional
 
 import discord
 from discord.ext import commands, tasks
 
+from bot.config.guild_config import GuildConfig
+from bot.config.profiles import get_profile
 from bot.config.settings import Settings
 from bot.core.i18n.translator import Translator
 from bot.core.store import ProfileStore, _support_ticket_text
@@ -28,47 +29,29 @@ from bot.core.views import (
 log = logging.getLogger("veil_bot")
 
 
-class BaseBot(commands.Bot, ABC):
-    """Shared base for all profile bots."""
+class BaseBot(commands.Bot):
+    """Shared multi-guild bot serving all verification profiles."""
 
-    def __init__(self, settings: Settings, profile_name: str):
+    def __init__(self, settings: Settings):
         intents = discord.Intents.default()
         intents.message_content = True
         intents.members = True
         super().__init__(command_prefix="!", intents=intents)
         self.settings = settings
-        self.profile_name = profile_name
         self.store = ProfileStore(str(settings.database_path))
         self._t = Translator(settings.default_language)
 
-        debug = os.getenv("DEBUG", "0") not in ("0", "", "false", "False", "no", "No")
+        debug = settings.debug
         logging.basicConfig(
             level=logging.DEBUG if debug else logging.INFO,
             format="%(asctime)s %(levelname)-7s %(name)s :: %(message)s",
         )
 
-    @abstractmethod
-    def _build_nickname(self, player_data) -> str:
-        ...
+    def get_guild_config(self, guild_id: int) -> Optional[GuildConfig]:
+        return self.store.get_guild_config(guild_id)
 
-    @abstractmethod
-    async def _assign_roles(self, member: discord.Member, player_data,
-                            interaction: discord.Interaction):
-        ...
-
-    @abstractmethod
-    def _build_summary_embed(self, player_data) -> discord.Embed:
-        ...
-
-    @abstractmethod
-    def _build_log_embed(self, member: discord.Member, player_data,
-                         session: dict) -> discord.Embed:
-        ...
-
-    @abstractmethod
-    async def _handle_update(self, member: discord.Member, user_id: int,
-                              stfc_link: str, player_data):
-        ...
+    def save_guild_config(self, config: GuildConfig) -> None:
+        self.store.save_guild_config(config)
 
     async def setup_hook(self):
         cogs_dir = pathlib.Path(__file__).resolve().parents[1] / "cogs"
@@ -85,12 +68,13 @@ class BaseBot(commands.Bot, ABC):
 
         await self.tree.sync()
         log.info("[SETUP] Commands synced globally")
-        try:
-            guild = discord.Object(id=self.settings.guild_id)
-            await self.tree.sync(guild=guild)
-            log.info(f"[SETUP] Commands synced to guild {self.settings.guild_id}")
-        except Exception as e:
-            log.warning(f"[SETUP] Could not sync to guild: {e}")
+        for config in self.store.get_all_guild_configs():
+            try:
+                guild = discord.Object(id=config.guild_id)
+                await self.tree.sync(guild=guild)
+                log.info(f"[SETUP] Commands synced to guild {config.guild_id}")
+            except Exception as e:
+                log.warning(f"[SETUP] Could not sync to guild {config.guild_id}: {e}")
 
         self.update_stfc_players.start()
         log.info("[SETUP] Background tasks started")
@@ -119,18 +103,26 @@ class BaseBot(commands.Bot, ABC):
                     self.store.delete_pending_wizard_view(row["message_id"])
                     continue
 
+                session = self.store.get_wizard_session(user_id)
+                guild_id = session.get("guild_id") if session else None
+                config = self.get_guild_config(guild_id) if guild_id else None
+                support_channel_id = config.support_channel_id if config else None
+
                 if view_type == "StartWizardView":
                     view = StartWizardView(
                         self.store,
-                        lambda: _support_ticket_text(self.settings.support_channel_id),
+                        lambda: _support_ticket_text(support_channel_id),
                         self._t,
+                        guild_id=guild_id,
                     )
                 elif view_type == "SkipStepsView":
                     view = SkipStepsView(user_id, self.store, self._t)
                 elif view_type == "SessionExpiredView":
                     view = SessionExpiredView(user_id, self.store, self._t)
                 elif view_type == "ConfirmVerificationView":
-                    view = ConfirmVerificationView(user_id, self.store, self._finalize_verification, self._t)
+                    view = ConfirmVerificationView(
+                        user_id, self.store, self._finalize_verification, self._t
+                    )
                 else:
                     log.warning(f"[SETUP] Unknown wizard view type: {view_type}")
                     continue
@@ -149,11 +141,18 @@ class BaseBot(commands.Bot, ABC):
                 return
             log.info(f"[SETUP] Restoring {len(pending)} pending rank confirmation(s)")
             for row in pending:
-                guild = self.get_guild(self.settings.guild_id)
-                channel = guild.get_channel(row["channel_id"]) if guild else None
+                channel = self.get_channel(row["channel_id"])
                 if not channel:
+                    try:
+                        channel = await self.fetch_channel(row["channel_id"])
+                    except Exception:
+                        channel = None
+                if not channel or not getattr(channel, "guild", None):
                     log.warning(f"[SETUP] Channel {row['channel_id']} not found for pending confirmation {row['message_id']}")
                     continue
+
+                guild = channel.guild
+                config = self.get_guild_config(guild.id)
                 try:
                     msg = await channel.fetch_message(row["message_id"])
                 except (discord.NotFound, discord.Forbidden):
@@ -161,10 +160,14 @@ class BaseBot(commands.Bot, ABC):
                     self.store.delete_pending_rank_confirmation(row["message_id"])
                     continue
                 view = RankConfirmationView(
-                    row["user_id"], row["member_name"], row["rank"],
-                    row["player_name"], row["alliance_tag"],
-                    self.settings, self.store,
-                    lambda: self.get_guild(self.settings.guild_id),
+                    row["user_id"],
+                    row["member_name"],
+                    row["rank"],
+                    row["player_name"],
+                    row["alliance_tag"],
+                    config,
+                    self.store,
+                    lambda g=guild: g,
                     self._t,
                 )
                 view.log_message = msg
@@ -178,19 +181,23 @@ class BaseBot(commands.Bot, ABC):
     async def on_ready(self):
         log.info(f"[READY] Logged in as {self.user}")
 
-    async def post_to_log_channel(self, embed: discord.Embed = None,
-                                   file: discord.File = None,
-                                   view: discord.ui.View = None,
-                                   content: str = None):
-        log_ch_id = self.settings.log_channel_id
-        if not log_ch_id:
+    async def post_to_log_channel(
+        self,
+        guild_id: int,
+        embed: discord.Embed = None,
+        file: discord.File = None,
+        view: discord.ui.View = None,
+        content: str = None,
+    ):
+        config = self.get_guild_config(guild_id)
+        if not config or not config.log_channel_id:
             return None
-        guild = self.get_guild(self.settings.guild_id)
+        guild = self.get_guild(guild_id)
         if not guild:
             return None
-        log_ch = guild.get_channel(log_ch_id)
+        log_ch = guild.get_channel(config.log_channel_id)
         if not log_ch:
-            log.warning(f"[LOG] Log channel {log_ch_id} not found")
+            log.warning(f"[LOG] Log channel {config.log_channel_id} not found in guild {guild_id}")
             return None
         try:
             return await log_ch.send(content=content, embed=embed, file=file, view=view)
@@ -198,16 +205,16 @@ class BaseBot(commands.Bot, ABC):
             log.warning(f"[LOG] Could not send to log channel: {e}")
             return None
 
-    async def post_admin_notification(self, message: str):
-        admin_role_id = self.settings.admin_role_id
-        if not admin_role_id:
+    async def post_admin_notification(self, guild_id: int, message: str):
+        config = self.get_guild_config(guild_id)
+        if not config or not config.admin_role_id:
             return
-        guild = self.get_guild(self.settings.guild_id)
+        guild = self.get_guild(guild_id)
         if not guild:
             return
-        admin_role = guild.get_role(admin_role_id)
+        admin_role = guild.get_role(config.admin_role_id)
         if not admin_role:
-            log.warning(f"[ADMIN] Admin role {admin_role_id} not found")
+            log.warning(f"[ADMIN] Admin role {config.admin_role_id} not found in guild {guild_id}")
             return
         for channel in guild.text_channels:
             try:
@@ -236,9 +243,9 @@ class BaseBot(commands.Bot, ABC):
 
         try:
             if session["step"] == 1:
-                await self._handle_step1(message, user_id)
+                await self._handle_step1(message, user_id, session)
             elif session["step"] == 2:
-                await self._handle_step2(message, user_id)
+                await self._handle_step2(message, user_id, session)
         except Exception as e:
             log.error(f"[WIZARD] Error in wizard flow for user {user_id}: {e}", exc_info=True)
             await message.reply(f"❌ An error occurred: {e}")
@@ -274,13 +281,18 @@ class BaseBot(commands.Bot, ABC):
                         description=self._t.t(None, "wizard.session_expired_desc"),
                         colour=discord.Colour.orange(),
                     )
-                    msg = await message.author.send(embed=embed, view=SessionExpiredView(user_id, self.store, self._t))
+                    msg = await message.author.send(
+                        embed=embed, view=SessionExpiredView(user_id, self.store, self._t)
+                    )
                     self.store.save_pending_wizard_view(msg.id, msg.channel.id, user_id, "SessionExpiredView")
                     log.info(f"[WIZARD] Notified user {user_id} of session expiration")
 
-    async def _handle_step1(self, message: discord.Message, user_id: int):
-        import json
+    async def _handle_step1(self, message: discord.Message, user_id: int, session: dict):
         from bot.legacy_profiles.stfc_verifier.stfc_scraper import STFCProScraper
+
+        guild_id = session.get("guild_id")
+        config = self.get_guild_config(guild_id) if guild_id else None
+        require_screenshot = config.require_screenshot if config else True
 
         player_link = message.content.strip()
         player_id = STFCProScraper.extract_player_id_from_url(player_link)
@@ -304,9 +316,9 @@ class BaseBot(commands.Bot, ABC):
         self.store.update_wizard_session(user_id, stfc_link=player_link, player_data_json=player_data_json)
         self.store.update_wizard_session(user_id, step=2)
 
-        if not self.settings.require_screenshot:
+        if not require_screenshot:
             self.store.update_wizard_session(user_id, step=3)
-            await self._show_summary_view(message, user_id)
+            await self._show_summary_view(message, user_id, guild_id)
             log.info(f"[WIZARD] User {user_id} provided STFC link, skipping screenshot step")
             return
 
@@ -320,7 +332,7 @@ class BaseBot(commands.Bot, ABC):
         self.store.save_pending_wizard_view(msg.id, msg.channel.id, user_id, "SkipStepsView")
         log.info(f"[WIZARD] User {user_id} provided STFC link, moving to step 2")
 
-    async def _handle_step2(self, message: discord.Message, user_id: int):
+    async def _handle_step2(self, message: discord.Message, user_id: int, session: dict):
         if not message.attachments:
             await message.reply(self._t.t(None, "wizard.no_screenshot"))
             return
@@ -339,10 +351,11 @@ class BaseBot(commands.Bot, ABC):
             await message.reply(self._t.t(None, "wizard.screenshot_error"))
             return
 
-        await self._show_summary_view(message, user_id)
+        guild_id = session.get("guild_id")
+        await self._show_summary_view(message, user_id, guild_id)
         log.info(f"[WIZARD] User {user_id} provided screenshot, showing summary")
 
-    async def _show_summary_view(self, message: discord.Message, user_id: int):
+    async def _show_summary_view(self, message: discord.Message, user_id: int, guild_id: Optional[int]):
         await self._cleanup_user_wizard_views(user_id)
 
         player_data = self.store.get_wizard_player_data(user_id)
@@ -351,14 +364,34 @@ class BaseBot(commands.Bot, ABC):
             self.store.delete_wizard_session(user_id)
             return
 
-        embed = self._build_summary_embed(player_data)
-        msg = await message.reply(embed=embed, view=ConfirmVerificationView(
-            user_id, self.store, self._finalize_verification, self._t))
+        config = self.get_guild_config(guild_id) if guild_id else None
+        bot_profile_name = config.bot_profile if config else "stfc_verifier"
+        profile = get_profile(bot_profile_name)
+
+        embed = profile.build_summary_embed(player_data, config) if config else discord.Embed(
+            title=self._t.t(None, "wizard.summary_title"),
+            description=self._t.t(None, "wizard.summary_description"),
+            colour=discord.Colour.gold(),
+        )
+        msg = await message.reply(
+            embed=embed,
+            view=ConfirmVerificationView(user_id, self.store, self._finalize_verification, self._t),
+        )
         self.store.save_pending_wizard_view(msg.id, msg.channel.id, user_id, "ConfirmVerificationView")
 
     async def _finalize_verification(self, interaction: discord.Interaction, session: dict):
         user_id = session["user_id"]
-        guild = self.get_guild(self.settings.guild_id)
+        guild_id = session.get("guild_id")
+        if not guild_id:
+            await interaction.followup.send(self._t.t(None, "wizard.guild_not_found"), ephemeral=True)
+            return
+
+        config = self.get_guild_config(guild_id)
+        if not config:
+            await interaction.followup.send(self._t.t(None, "wizard.guild_not_found"), ephemeral=True)
+            return
+
+        guild = self.get_guild(guild_id)
         if not guild:
             await interaction.followup.send(self._t.t(None, "wizard.guild_not_found"), ephemeral=True)
             return
@@ -388,11 +421,13 @@ class BaseBot(commands.Bot, ABC):
             await interaction.followup.send(self._t.t(None, "wizard.fetch_error"), ephemeral=True)
             return
 
+        profile = get_profile(config.bot_profile)
+
         feedback = ["📋 **Verification Complete**\n"]
         feedback.append("✅ **stfc.pro Data:**")
         feedback.append(f"  {format_player_info(player_data)}\n")
 
-        new_nick = self._build_nickname(player_data)
+        new_nick = profile.build_nickname(player_data)
         try:
             await member.edit(nick=new_nick)
             feedback.append(self._t.t(None, "wizard.nickname_set", nickname=new_nick))
@@ -405,18 +440,19 @@ class BaseBot(commands.Bot, ABC):
             log.error(f"[WIZARD] Error setting nickname for {member.id}: {e}")
 
         self.store.store_stfc_player(member.id, player_link, player_data)
-
         self.store.delete_pending_wizard_views_by_user(member.id)
 
-        role_feedback, confirmation_view = await self._assign_roles(member, player_data, interaction)
+        role_feedback, confirmation_view = await profile.assign_roles(
+            self, member, player_data, interaction, config
+        )
         feedback.extend(role_feedback)
 
         self.store.mark_verified(member.id)
         self.store.log_verification_action(member.id, "verified")
         feedback.append(self._t.t(None, "wizard.player_data_stored"))
 
-        if self.settings.verified_role_id:
-            verify_role = guild.get_role(self.settings.verified_role_id)
+        if config.verified_role_id:
+            verify_role = guild.get_role(config.verified_role_id)
             if verify_role:
                 try:
                     await member.add_roles(verify_role, reason="Verified via stfc.pro")
@@ -429,8 +465,8 @@ class BaseBot(commands.Bot, ABC):
         feedback_text = "\n".join(feedback)
         await interaction.followup.send(feedback_text, ephemeral=True)
 
-        if self.settings.log_channel_id:
-            embed = self._build_log_embed(member, player_data, session)
+        if config.log_channel_id:
+            embed = profile.build_log_embed(member, player_data, session)
             screenshot_file = None
             if session.get("screenshot_data"):
                 try:
@@ -442,13 +478,13 @@ class BaseBot(commands.Bot, ABC):
 
             try:
                 if screenshot_file:
-                    log_msg = await self.post_to_log_channel(embed, screenshot_file)
+                    log_msg = await self.post_to_log_channel(guild.id, embed=embed, file=screenshot_file)
                 else:
-                    log_msg = await self.post_to_log_channel(embed)
+                    log_msg = await self.post_to_log_channel(guild.id, embed=embed)
 
                 if confirmation_view and log_msg:
                     confirmation_view.log_message = log_msg
-                    admin_ping = f"<@&{self.settings.admin_role_id}>" if self.settings.admin_role_id else "Admins"
+                    admin_ping = f"<@&{config.admin_role_id}>" if config.admin_role_id else "Admins"
                     alliance_display = f"[{player_data.alliance_tag}]" if player_data.alliance_tag else "N/A"
                     confirm_embed = discord.Embed(
                         title=self._t.t(None, "wizard.log_confirm_title"),
@@ -465,9 +501,12 @@ class BaseBot(commands.Bot, ABC):
                         value=getattr(player_data, "rank", "N/A"),
                         inline=True,
                     )
-                    confirm_embed.add_field(name=self._t.t(None, "rank.alliance_label"), value=alliance_display, inline=True)
+                    confirm_embed.add_field(
+                        name=self._t.t(None, "rank.alliance_label"), value=alliance_display, inline=True
+                    )
                     confirm_msg = await self.post_to_log_channel(
-                        embed=confirm_embed, view=confirmation_view, content=admin_ping)
+                        guild.id, embed=confirm_embed, view=confirmation_view, content=admin_ping
+                    )
                     if confirm_msg:
                         confirmation_view.log_message = confirm_msg
                         confirmation_view.confirmation_message_id = confirm_msg.id
@@ -490,9 +529,11 @@ class BaseBot(commands.Bot, ABC):
         )
 
     async def on_member_join(self, member: discord.Member):
-        if member.guild.id != self.settings.guild_id:
-            return
         if member.bot:
+            return
+
+        config = self.get_guild_config(member.guild.id)
+        if not config:
             return
 
         try:
@@ -521,8 +562,9 @@ class BaseBot(commands.Bot, ABC):
                 embed=embed,
                 view=StartWizardView(
                     self.store,
-                    lambda: _support_ticket_text(self.settings.support_channel_id),
+                    lambda: _support_ticket_text(config.support_channel_id),
                     self._t,
+                    guild_id=member.guild.id,
                 ),
             )
             self.store.save_pending_wizard_view(msg.id, msg.channel.id, member.id, "StartWizardView")
@@ -533,7 +575,8 @@ class BaseBot(commands.Bot, ABC):
             log.error(f"[WIZARD] Error sending welcome to member {member.id}: {e}")
 
     async def on_member_remove(self, member: discord.Member):
-        if member.guild.id != self.settings.guild_id:
+        config = self.get_guild_config(member.guild.id)
+        if not config:
             return
         if self.store.get_player_data(member.id):
             self.store.delete_verification(member.id)
@@ -544,31 +587,35 @@ class BaseBot(commands.Bot, ABC):
 
     @tasks.loop(hours=1)
     async def update_stfc_players(self):
-        guild = self.get_guild(self.settings.guild_id)
-        if not guild:
-            log.warning("[UPDATE] Guild not found")
+        configs = self.store.get_all_guild_configs()
+        if not configs:
             return
 
         log.info("[UPDATE] Starting periodic player update check")
         players = self.store.get_all_players()
         log.info(f"[UPDATE] Found {len(players)} players to check")
 
-        for user_id, stfc_link, player_id in players:
-            member = guild.get_member(user_id)
-            if not member:
-                log.debug(f"[UPDATE] Member {user_id} no longer in guild")
+        for config in configs:
+            guild = self.get_guild(config.guild_id)
+            if not guild:
                 continue
 
-            try:
-                from bot.legacy_profiles.stfc_verifier.stfc_scraper import STFCProScraper
-                player_data = STFCProScraper.fetch_player_data(player_id)
-                if not player_data:
-                    log.warning(f"[UPDATE] Could not fetch data for player {player_id}")
+            profile = get_profile(config.bot_profile)
+            for user_id, stfc_link, player_id in players:
+                member = guild.get_member(user_id)
+                if not member:
                     continue
 
-                await self._handle_update(member, user_id, stfc_link, player_data)
-            except Exception as e:
-                log.error(f"[UPDATE] Error updating player {player_id}: {e}")
+                try:
+                    from bot.legacy_profiles.stfc_verifier.stfc_scraper import STFCProScraper
+                    player_data = STFCProScraper.fetch_player_data(player_id)
+                    if not player_data:
+                        log.warning(f"[UPDATE] Could not fetch data for player {player_id}")
+                        continue
+
+                    await profile.handle_update(self, member, user_id, stfc_link, player_data, config)
+                except Exception as e:
+                    log.error(f"[UPDATE] Error updating player {player_id}: {e}")
 
         log.info("[UPDATE] Periodic player update check completed")
 

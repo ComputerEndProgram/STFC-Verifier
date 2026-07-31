@@ -5,16 +5,21 @@ import discord
 from discord import app_commands
 from discord.ext import commands
 
-from bot.core.store import _support_ticket_text
+from bot.config.guild_config import GuildConfig
+from bot.config.profiles import PROFILE_REGISTRY, get_profile
 from bot.core.i18n.translator import Translator
+from bot.core.store import _support_ticket_text
 from bot.core.views import ChannelStartView, StartWizardView
 from bot.legacy_profiles.stfc_verifier.stfc_scraper import STFCProScraper, format_player_info
 
 log = logging.getLogger("veil_bot")
 
 _RANK_TIERS = {
-    "agent": "base", "operative": "base", "premier": "base",
-    "commodore": "commodore", "admiral": "admiral",
+    "agent": "base",
+    "operative": "base",
+    "premier": "base",
+    "commodore": "commodore",
+    "admiral": "admiral",
 }
 
 
@@ -25,13 +30,176 @@ def _get_rank_tier(rank: Optional[str]) -> Optional[str]:
 
 
 class AdminCog(commands.Cog):
-    """Handles admin recall (guild-only)."""
+    """Handles admin commands and guild configuration."""
 
     def __init__(self, bot: commands.Bot):
         self.bot = bot
-        self._t = Translator(bot.settings.default_language)
+        self._t = Translator(getattr(bot.settings, "default_language", "en"))
 
     admin = app_commands.Group(name="admin", description="Admin commands")
+
+    async def _handle_setup(
+        self,
+        interaction: discord.Interaction,
+        profile: str,
+        verify_channel: Optional[discord.TextChannel] = None,
+        log_channel: Optional[discord.TextChannel] = None,
+        support_channel: Optional[discord.TextChannel] = None,
+        verified_role: Optional[discord.Role] = None,
+        unverified_role: Optional[discord.Role] = None,
+        member_role: Optional[discord.Role] = None,
+        commodore_role: Optional[discord.Role] = None,
+        admiral_role: Optional[discord.Role] = None,
+        admin_role: Optional[discord.Role] = None,
+        ops71_plus_role: Optional[discord.Role] = None,
+        minimum_ops_level: Optional[int] = None,
+        stfc_server_number: Optional[int] = None,
+        manage_alliance_roles: Optional[bool] = None,
+    ):
+        if not interaction.guild:
+            return await interaction.response.send_message(
+                "❌ Setup command can only be used in a server.", ephemeral=True
+            )
+
+        if not interaction.user.guild_permissions.manage_guild and not interaction.user.guild_permissions.administrator:
+            return await interaction.response.send_message(
+                "❌ You need 'Manage Server' permission to run setup.", ephemeral=True
+            )
+
+        if profile not in PROFILE_REGISTRY:
+            valid_profiles = ", ".join(sorted(PROFILE_REGISTRY.keys()))
+            return await interaction.response.send_message(
+                f"❌ Invalid profile '{profile}'. Choose from: {valid_profiles}",
+                ephemeral=True,
+            )
+
+        guild_id = interaction.guild.id
+        existing = self.bot.get_guild_config(guild_id) or GuildConfig(guild_id=guild_id)
+
+        config = GuildConfig(
+            guild_id=guild_id,
+            bot_profile=profile,
+            verify_channel_id=verify_channel.id if verify_channel else existing.verify_channel_id,
+            log_channel_id=log_channel.id if log_channel else existing.log_channel_id,
+            support_channel_id=support_channel.id if support_channel else existing.support_channel_id,
+            verified_role_id=verified_role.id if verified_role else existing.verified_role_id,
+            unverified_role_id=unverified_role.id if unverified_role else existing.unverified_role_id,
+            member_role_id=member_role.id if member_role else existing.member_role_id,
+            commodore_role_id=commodore_role.id if commodore_role else existing.commodore_role_id,
+            admiral_role_id=admiral_role.id if admiral_role else existing.admiral_role_id,
+            admin_role_id=admin_role.id if admin_role else existing.admin_role_id,
+            ops71_plus_role_id=ops71_plus_role.id if ops71_plus_role else existing.ops71_plus_role_id,
+            minimum_ops_level=minimum_ops_level if minimum_ops_level is not None else existing.minimum_ops_level,
+            stfc_server_number=stfc_server_number if stfc_server_number is not None else existing.stfc_server_number,
+            manage_alliance_roles=manage_alliance_roles if manage_alliance_roles is not None else existing.manage_alliance_roles,
+        )
+
+        self.bot.save_guild_config(config)
+
+        summary = (
+            f"✅ **Server setup complete for {interaction.guild.name}!**\n"
+            f"• **Profile:** `{config.bot_profile}`\n"
+            f"• **Alliance Role Management:** `{config.manage_alliance_roles}`\n"
+        )
+        if config.stfc_server_number:
+            summary += f"• **STFC Server:** `{config.stfc_server_number}`\n"
+        if config.minimum_ops_level:
+            summary += f"• **Minimum OPS Level:** `{config.minimum_ops_level}`\n"
+        if config.verify_channel_id:
+            summary += f"• **Verify Channel:** <#{config.verify_channel_id}>\n"
+        if config.log_channel_id:
+            summary += f"• **Log Channel:** <#{config.log_channel_id}>\n"
+
+        await interaction.response.send_message(summary, ephemeral=True)
+        log.info(f"[SETUP] Configured server {guild_id} with profile {profile}")
+
+    @app_commands.command(name="setup", description="Configure bot settings for this server")
+    @app_commands.guild_only()
+    @app_commands.choices(
+        profile=[
+            app_commands.Choice(name="STFC Verifier (Rank/Alliance)", value="stfc_verifier"),
+            app_commands.Choice(name="Veil Security (OPS Level)", value="veil_security"),
+        ]
+    )
+    async def standalone_setup_cmd(
+        self,
+        interaction: discord.Interaction,
+        profile: str,
+        verify_channel: Optional[discord.TextChannel] = None,
+        log_channel: Optional[discord.TextChannel] = None,
+        support_channel: Optional[discord.TextChannel] = None,
+        verified_role: Optional[discord.Role] = None,
+        unverified_role: Optional[discord.Role] = None,
+        member_role: Optional[discord.Role] = None,
+        commodore_role: Optional[discord.Role] = None,
+        admiral_role: Optional[discord.Role] = None,
+        admin_role: Optional[discord.Role] = None,
+        ops71_plus_role: Optional[discord.Role] = None,
+        minimum_ops_level: Optional[int] = None,
+        stfc_server_number: Optional[int] = None,
+        manage_alliance_roles: Optional[bool] = None,
+    ):
+        await self._handle_setup(
+            interaction,
+            profile,
+            verify_channel,
+            log_channel,
+            support_channel,
+            verified_role,
+            unverified_role,
+            member_role,
+            commodore_role,
+            admiral_role,
+            admin_role,
+            ops71_plus_role,
+            minimum_ops_level,
+            stfc_server_number,
+            manage_alliance_roles,
+        )
+
+    @admin.command(name="setup", description="[ADMIN] Configure bot settings for this server")
+    @app_commands.guild_only()
+    @app_commands.choices(
+        profile=[
+            app_commands.Choice(name="STFC Verifier (Rank/Alliance)", value="stfc_verifier"),
+            app_commands.Choice(name="Veil Security (OPS Level)", value="veil_security"),
+        ]
+    )
+    async def admin_setup_cmd(
+        self,
+        interaction: discord.Interaction,
+        profile: str,
+        verify_channel: Optional[discord.TextChannel] = None,
+        log_channel: Optional[discord.TextChannel] = None,
+        support_channel: Optional[discord.TextChannel] = None,
+        verified_role: Optional[discord.Role] = None,
+        unverified_role: Optional[discord.Role] = None,
+        member_role: Optional[discord.Role] = None,
+        commodore_role: Optional[discord.Role] = None,
+        admiral_role: Optional[discord.Role] = None,
+        admin_role: Optional[discord.Role] = None,
+        ops71_plus_role: Optional[discord.Role] = None,
+        minimum_ops_level: Optional[int] = None,
+        stfc_server_number: Optional[int] = None,
+        manage_alliance_roles: Optional[bool] = None,
+    ):
+        await self._handle_setup(
+            interaction,
+            profile,
+            verify_channel,
+            log_channel,
+            support_channel,
+            verified_role,
+            unverified_role,
+            member_role,
+            commodore_role,
+            admiral_role,
+            admin_role,
+            ops71_plus_role,
+            minimum_ops_level,
+            stfc_server_number,
+            manage_alliance_roles,
+        )
 
     @admin.command(
         name="recall",
@@ -48,19 +216,35 @@ class AdminCog(commands.Cog):
         user: discord.User,
         reason: str = "No reason provided",
     ):
-        if not interaction.user or not isinstance(interaction.user, discord.Member):
+        if not interaction.guild or not isinstance(interaction.user, discord.Member):
             return await interaction.response.send_message(
                 "❌ Could not verify your permissions.",
                 ephemeral=True,
             )
 
-        settings = self.bot.settings
+        config = self.bot.get_guild_config(interaction.guild.id)
+        if not config:
+            if interaction.user.guild_permissions.manage_guild:
+                return await interaction.response.send_message(
+                    "⚠️ This server is not configured yet. Please run `/setup` first.",
+                    ephemeral=True,
+                )
+            return await interaction.response.send_message(
+                "⚠️ The verification bot has not been configured for this server yet.",
+                ephemeral=True,
+            )
+
         store = self.bot.store
         _t = self._t
         locale = interaction.locale
 
-        admin_role = interaction.guild.get_role(settings.admin_role_id) if interaction.guild and settings.admin_role_id else None
-        if not admin_role or admin_role not in interaction.user.roles:
+        admin_role = (
+            interaction.guild.get_role(config.admin_role_id)
+            if config.admin_role_id
+            else None
+        )
+        is_admin_user = (admin_role and admin_role in interaction.user.roles) or interaction.user.guild_permissions.administrator
+        if not is_admin_user:
             return await interaction.response.send_message(
                 "❌ You do not have permission to use this command.",
                 ephemeral=True,
@@ -75,10 +259,7 @@ class AdminCog(commands.Cog):
                 ephemeral=True,
             )
 
-        guild = self.bot.get_guild(settings.guild_id)
-        if not guild:
-            return await interaction.followup.send("❌ Could not access the server.", ephemeral=True)
-
+        guild = interaction.guild
         member = guild.get_member(user.id)
         if not member:
             return await interaction.followup.send(
@@ -86,33 +267,31 @@ class AdminCog(commands.Cog):
                 ephemeral=True,
             )
 
-        player_data = store.get_player_data(user.id)
-
         try:
             roles_to_remove = []
 
-            if settings.member_role_id:
-                member_role = guild.get_role(settings.member_role_id)
+            if config.member_role_id:
+                member_role = guild.get_role(config.member_role_id)
                 if member_role and member_role in member.roles:
                     roles_to_remove.append(member_role)
 
-            if settings.commodore_role_id:
-                commodore_role = guild.get_role(settings.commodore_role_id)
+            if config.commodore_role_id:
+                commodore_role = guild.get_role(config.commodore_role_id)
                 if commodore_role and commodore_role in member.roles:
                     roles_to_remove.append(commodore_role)
 
-            if settings.admiral_role_id:
-                admiral_role = guild.get_role(settings.admiral_role_id)
+            if config.admiral_role_id:
+                admiral_role = guild.get_role(config.admiral_role_id)
                 if admiral_role and admiral_role in member.roles:
                     roles_to_remove.append(admiral_role)
 
-            if settings.ops71_plus_role_id:
-                ops_role = guild.get_role(settings.ops71_plus_role_id)
+            if config.ops71_plus_role_id:
+                ops_role = guild.get_role(config.ops71_plus_role_id)
                 if ops_role and ops_role in member.roles:
                     roles_to_remove.append(ops_role)
 
-            if settings.verified_role_id:
-                verify_role = guild.get_role(settings.verified_role_id)
+            if config.verified_role_id:
+                verify_role = guild.get_role(config.verified_role_id)
                 if verify_role and verify_role in member.roles:
                     roles_to_remove.append(verify_role)
 
@@ -155,7 +334,12 @@ class AdminCog(commands.Cog):
 
             msg = await member.send(
                 embed=embed,
-                view=StartWizardView(store, lambda: _support_ticket_text(settings.support_channel_id), self._t),
+                view=StartWizardView(
+                    store,
+                    lambda: _support_ticket_text(config.support_channel_id),
+                    self._t,
+                    guild_id=guild.id,
+                ),
             )
             store.save_pending_wizard_view(msg.id, msg.channel.id, member.id, "StartWizardView")
             log.info(f"[RECALL] Sent recall notification to {member.id}")
@@ -169,7 +353,7 @@ class AdminCog(commands.Cog):
             ephemeral=True,
         )
 
-        if settings.log_channel_id:
+        if config.log_channel_id:
             embed = discord.Embed(
                 title=_t.t(locale, "wizard.log_recalled_title"),
                 description=f"**{member.mention}** verification recalled by {interaction.user.mention}",
@@ -184,7 +368,7 @@ class AdminCog(commands.Cog):
                     embed.add_field(name=_t.t(locale, "rank.label"), value=f"{rank_field}", inline=True)
 
             try:
-                await self.bot.post_to_log_channel(embed)
+                await self.bot.post_to_log_channel(guild.id, embed=embed)
                 log.info("[RECALL] Logged recall to log channel")
             except Exception as e:
                 log.warning(f"[RECALL] Could not log to channel: {e}")
@@ -206,21 +390,33 @@ class AdminCog(commands.Cog):
         player_url: str,
         user: discord.User,
     ):
-        if not interaction.user or not isinstance(interaction.user, discord.Member):
+        if not interaction.guild or not isinstance(interaction.user, discord.Member):
             return await interaction.response.send_message(
                 "❌ Could not verify your permissions.",
                 ephemeral=True,
             )
 
-        settings = self.bot.settings
+        config = self.bot.get_guild_config(interaction.guild.id)
+        if not config:
+            if interaction.user.guild_permissions.manage_guild:
+                return await interaction.response.send_message(
+                    "⚠️ This server is not configured yet. Please run `/setup` first.",
+                    ephemeral=True,
+                )
+            return await interaction.response.send_message(
+                "⚠️ The verification bot has not been configured for this server yet.",
+                ephemeral=True,
+            )
+
         store = self.bot.store
 
         admin_role = (
-            interaction.guild.get_role(settings.admin_role_id)
-            if interaction.guild and settings.admin_role_id
+            interaction.guild.get_role(config.admin_role_id)
+            if config.admin_role_id
             else None
         )
-        if not admin_role or admin_role not in interaction.user.roles:
+        is_admin_user = (admin_role and admin_role in interaction.user.roles) or interaction.user.guild_permissions.administrator
+        if not is_admin_user:
             return await interaction.response.send_message(
                 "❌ You do not have permission to use this command.",
                 ephemeral=True,
@@ -228,10 +424,7 @@ class AdminCog(commands.Cog):
 
         await interaction.response.defer(thinking=True)
 
-        guild = self.bot.get_guild(settings.guild_id)
-        if not guild:
-            return await interaction.followup.send("❌ Could not access the server.", ephemeral=True)
-
+        guild = interaction.guild
         member = guild.get_member(user.id)
         if not member:
             return await interaction.followup.send(
@@ -260,11 +453,13 @@ class AdminCog(commands.Cog):
                 ephemeral=True,
             )
 
+        profile = get_profile(config.bot_profile)
+
         feedback = ["📋 **Admin Verification Complete**\n"]
         feedback.append("✅ **stfc.pro Data:**")
         feedback.append(f"  {format_player_info(player_data)}\n")
 
-        new_nick = self.bot._build_nickname(player_data)
+        new_nick = profile.build_nickname(player_data)
         try:
             await member.edit(nick=new_nick)
             feedback.append(f"✅ Nickname set to: `{new_nick}`")
@@ -280,7 +475,9 @@ class AdminCog(commands.Cog):
         store.delete_pending_wizard_views_by_user(member.id)
 
         try:
-            role_feedback, confirmation_view = await self.bot._assign_roles(member, player_data, interaction)
+            role_feedback, confirmation_view = await profile.assign_roles(
+                self.bot, member, player_data, interaction, config
+            )
             feedback.extend(role_feedback)
         except Exception as e:
             feedback.append(f"❌ Error assigning roles: {e}")
@@ -288,11 +485,13 @@ class AdminCog(commands.Cog):
             confirmation_view = None
 
         store.mark_verified(member.id)
-        store.log_verification_action(member.id, "verified", interaction.user.id, "Manual admin verification")
+        store.log_verification_action(
+            member.id, "verified", interaction.user.id, "Manual admin verification"
+        )
         feedback.append("💾 Player data stored for periodic updates")
 
-        if settings.verified_role_id:
-            verify_role = guild.get_role(settings.verified_role_id)
+        if config.verified_role_id:
+            verify_role = guild.get_role(config.verified_role_id)
             if verify_role:
                 try:
                     await member.add_roles(verify_role, reason="Verified via admin command")
@@ -305,13 +504,13 @@ class AdminCog(commands.Cog):
         feedback_text = "\n".join(feedback)
         await interaction.followup.send(feedback_text, ephemeral=True)
 
-        if settings.log_channel_id:
+        if config.log_channel_id:
             session = {
                 "user_id": member.id,
                 "stfc_link": player_url,
                 "screenshot_data": None,
             }
-            embed = self.bot._build_log_embed(member, player_data, session)
+            embed = profile.build_log_embed(member, player_data, session)
             embed.add_field(
                 name="Action",
                 value=f"Manual verification by {interaction.user.mention}",
@@ -322,13 +521,13 @@ class AdminCog(commands.Cog):
                 embed.add_field(name="Rank Tier", value=rank_tier.title(), inline=True)
 
             try:
-                log_msg = await self.bot.post_to_log_channel(embed)
+                log_msg = await self.bot.post_to_log_channel(guild.id, embed=embed)
                 log.info("[ADMIN] Logged manual verification to log channel")
 
                 if confirmation_view and log_msg:
                     confirmation_view.log_message = log_msg
                     admin_ping = (
-                        f"<@&{settings.admin_role_id}>" if settings.admin_role_id else "Admins"
+                        f"<@&{config.admin_role_id}>" if config.admin_role_id else "Admins"
                     )
                     alliance_display = (
                         f"[{player_data.alliance_tag}]" if player_data.alliance_tag else "N/A"
@@ -352,7 +551,7 @@ class AdminCog(commands.Cog):
                         name="Alliance", value=alliance_display, inline=True
                     )
                     confirm_msg = await self.bot.post_to_log_channel(
-                        embed=confirm_embed, view=confirmation_view, content=admin_ping
+                        guild.id, embed=confirm_embed, view=confirmation_view, content=admin_ping
                     )
                     if confirm_msg:
                         confirmation_view.log_message = confirm_msg
@@ -382,42 +581,49 @@ class AdminCog(commands.Cog):
     )
     @app_commands.guild_only()
     async def send_button_cmd(self, interaction: discord.Interaction):
-        if not interaction.user or not isinstance(interaction.user, discord.Member):
+        if not interaction.guild or not isinstance(interaction.user, discord.Member):
             return await interaction.response.send_message(
                 "❌ Could not verify your permissions.",
                 ephemeral=True,
             )
 
-        settings = self.bot.settings
-        store = self.bot.store
+        config = self.bot.get_guild_config(interaction.guild.id)
+        if not config:
+            if interaction.user.guild_permissions.manage_guild:
+                return await interaction.response.send_message(
+                    "⚠️ This server is not configured yet. Please run `/setup` first.",
+                    ephemeral=True,
+                )
+            return await interaction.response.send_message(
+                "⚠️ The verification bot has not been configured for this server yet.",
+                ephemeral=True,
+            )
 
         admin_role = (
-            interaction.guild.get_role(settings.admin_role_id)
-            if interaction.guild and settings.admin_role_id
+            interaction.guild.get_role(config.admin_role_id)
+            if config.admin_role_id
             else None
         )
-        if not admin_role or admin_role not in interaction.user.roles:
+        is_admin_user = (admin_role and admin_role in interaction.user.roles) or interaction.user.guild_permissions.administrator
+        if not is_admin_user:
             return await interaction.response.send_message(
                 "❌ You do not have permission to use this command.",
                 ephemeral=True,
             )
 
-        if not settings.verify_channel_id:
+        if not config.verify_channel_id:
             return await interaction.response.send_message(
-                "❌ VERIFY_CHANNEL_ID is not configured.",
+                "❌ Verification channel is not configured for this server.",
                 ephemeral=True,
             )
 
         await interaction.response.defer(ephemeral=True)
 
-        guild = self.bot.get_guild(settings.guild_id)
-        if not guild:
-            return await interaction.followup.send("❌ Could not access the server.", ephemeral=True)
-
-        channel = guild.get_channel(settings.verify_channel_id)
+        guild = interaction.guild
+        channel = guild.get_channel(config.verify_channel_id)
         if not channel:
             return await interaction.followup.send(
-                f"❌ Verify channel <#{settings.verify_channel_id}> not found.",
+                f"❌ Verify channel <#{config.verify_channel_id}> not found.",
                 ephemeral=True,
             )
 
@@ -430,16 +636,20 @@ class AdminCog(commands.Cog):
         try:
             await channel.send(embed=embed, view=ChannelStartView())
             await interaction.followup.send(
-                f"✅ Verification button posted to <#{settings.verify_channel_id}>.",
+                f"✅ Verification button posted to <#{config.verify_channel_id}>.",
                 ephemeral=True,
             )
-            log.info(f"[ADMIN] Sent verification button to channel {settings.verify_channel_id} by {interaction.user.id}")
+            log.info(
+                f"[ADMIN] Sent verification button to channel {config.verify_channel_id} by {interaction.user.id}"
+            )
         except discord.Forbidden:
             await interaction.followup.send(
                 "❌ I don't have permission to send messages in that channel.",
                 ephemeral=True,
             )
-            log.warning(f"[ADMIN] Could not send to verify channel {settings.verify_channel_id} (Forbidden)")
+            log.warning(
+                f"[ADMIN] Could not send to verify channel {config.verify_channel_id} (Forbidden)"
+            )
         except Exception as e:
             await interaction.followup.send(f"❌ Error: {e}", ephemeral=True)
             log.error(f"[ADMIN] Error sending verification button: {e}")

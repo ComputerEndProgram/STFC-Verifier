@@ -1,0 +1,10 @@
+{% extends "base.html" %}
+{% block content %}
+<section class="lcars-section">
+  <div class="lcars-text-bar">Error {{ status_code }}</div>
+  <div class="lcars-section-body">
+    <p class="error">{{ message }}</p>
+    <p class="muted tiny">Your permissions are verified against Discord on every request.</p>
+  </div>
+</section>
+{% endblock %}

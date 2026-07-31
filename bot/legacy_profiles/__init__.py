@@ -1,2 +1,2 @@
-"""Legacy profile implementations imported from source repositories."""
+"""Shared STFC scraper retained from the original per-profile repositories."""
 

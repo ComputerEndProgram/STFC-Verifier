@@ -1,0 +1,63 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    {% include "_head.html" %}
+  </head>
+  <body>
+    <div class="lcars-screen">
+      <div class="lcars-frame" style="--lcars-frame-color: var(--lcars-a{{ frame_color }})">
+        <aside class="lcars-sidebar" aria-label="Console navigation">
+          <div class="lcars-sidebar-nav">
+            {% for item in nav_top + nav_bottom %}
+              {% if item.to %}
+                <a
+                  class="lcars-nav-btn lcars-nav-btn--a{{ item.color }}{{ ' lcars-nav-btn--active' if item.active else '' }}"
+                  href="{{ item.to }}"
+                  {% if item.active %}aria-current="page"{% endif %}
+                >{{ item.label }}</a>
+              {% elif item.post_to %}
+                <form class="lcars-nav-form" method="post" action="{{ item.post_to }}">
+                  <button type="submit" class="lcars-nav-btn lcars-nav-btn--{{ item.color }}">{{ item.label }}</button>
+                </form>
+              {% else %}
+                <div class="lcars-nav-btn lcars-nav-btn--deco lcars-nav-btn--a{{ item.color }}">{{ item.label }}</div>
+              {% endif %}
+            {% endfor %}
+          </div>
+          <div class="lcars-sidebar-fill" aria-hidden="true"></div>
+          <div class="lcars-sidebar-deco" aria-hidden="true">
+            <div class="lcars-nav-btn lcars-nav-btn--deco">01-4409</div>
+            <div class="lcars-nav-btn lcars-nav-btn--deco">LCARS 24</div>
+          </div>
+        </aside>
+
+        <header class="lcars-header">
+          {% if eyebrow %}<p class="lcars-eyebrow">{{ eyebrow }}</p>{% endif %}
+          <div class="lcars-banner-row">
+            <h1 class="lcars-banner">{{ title }}</h1>
+            {% if actions %}<div class="lcars-banner-actions">{{ actions | safe }}</div>{% endif %}
+          </div>
+        </header>
+
+        <div class="lcars-topbar" aria-hidden="true">
+          <span class="lcars-bar lcars-bar--elbow"></span>
+          <span class="lcars-bar lcars-bar--gap1"></span>
+          <span class="lcars-bar lcars-bar--seg2"></span>
+          <span class="lcars-bar lcars-bar--seg3"></span>
+          <span class="lcars-bar lcars-bar--tail"></span>
+        </div>
+
+        <main class="lcars-main">
+          <nav class="lcars-mobile-nav" aria-label="Console navigation">
+            {% for item in nav_top + nav_bottom %}
+              {% if item.to %}
+                <a class="lcars-pill lcars-pill--sm lcars-pill--a{{ item.color }}" href="{{ item.to }}">{{ item.label }}</a>
+              {% endif %}
+            {% endfor %}
+          </nav>
+          {% block content %}{% endblock %}
+        </main>
+      </div>
+    </div>
+  </body>
+</html>

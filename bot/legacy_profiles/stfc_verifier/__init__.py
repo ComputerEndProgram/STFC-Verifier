@@ -1,2 +1,1 @@
-from .bot_impl import run, STFCVerifierBot
-
+"""Shared STFC scraper retained from the original per-profile repositories."""

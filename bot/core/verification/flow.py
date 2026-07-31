@@ -10,16 +10,17 @@ from bot.profiles.base import VerificationProfile
 def create_session(
     session_store: SessionStore,
     profile: VerificationProfile,
-    settings: Settings,
+    guild_id: int,
     user_id: int,
     language: str,
+    session_ttl_hours: int = 168,
 ) -> WizardSession:
     steps = profile.build_steps()
-    expires_at = datetime.now(UTC) + timedelta(hours=settings.session_ttl_hours)
+    expires_at = datetime.now(UTC) + timedelta(hours=session_ttl_hours)
     session = WizardSession(
         session_id=str(uuid4()),
         user_id=user_id,
-        guild_id=settings.guild_id,
+        guild_id=guild_id,
         profile=profile.name,
         language=language,
         current_step=steps[0],
@@ -39,4 +40,3 @@ def advance_session(
     session.answers.update(answers)
     session_store.save_session(session)
     return session
-

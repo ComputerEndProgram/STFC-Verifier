@@ -4,8 +4,8 @@ import discord
 from discord import app_commands
 from discord.ext import commands
 
-from bot.core.store import _support_ticket_text
 from bot.core.i18n.translator import Translator
+from bot.core.store import _support_ticket_text
 from bot.core.views import StartWizardView
 
 log = logging.getLogger("veil_bot")
@@ -16,7 +16,7 @@ class VerificationCog(commands.Cog):
 
     def __init__(self, bot: commands.Bot):
         self.bot = bot
-        self._t = Translator(bot.settings.default_language)
+        self._t = Translator(getattr(bot.settings, "default_language", "en"))
 
     @app_commands.command(
         name="verify",
@@ -27,10 +27,27 @@ class VerificationCog(commands.Cog):
         locale = interaction.locale
         await interaction.response.defer(ephemeral=True)
 
+        guild_id = interaction.guild_id
+        config = self.bot.get_guild_config(guild_id) if guild_id else None
+
+        if not config:
+            if interaction.user.guild_permissions.manage_guild:
+                await interaction.followup.send(
+                    "⚠️ The verification bot is not configured for this server yet. Please run `/setup` (or `/admin setup`) to configure it.",
+                    ephemeral=True,
+                )
+            else:
+                await interaction.followup.send(
+                    "⚠️ The verification bot has not been configured for this server yet. Please contact a server administrator.",
+                    ephemeral=True,
+                )
+            return
+
         store = self.bot.store
         _t = self._t
+
         if store.get_player_data(interaction.user.id):
-            support_id = self.bot.settings.support_channel_id
+            support_id = config.support_channel_id
             ticket_text = (
                 f"Open a support ticket in <#{support_id}>."
                 if support_id
@@ -40,7 +57,9 @@ class VerificationCog(commands.Cog):
                 _t.t(locale, "verification.already_verified", support_ticket=ticket_text),
                 ephemeral=True,
             )
-            log.info(f"[WIZARD] User {interaction.user.id} attempted re-verification via command (already verified)")
+            log.info(
+                f"[WIZARD] User {interaction.user.id} attempted re-verification via command (already verified)"
+            )
             return
 
         embed = discord.Embed(
@@ -68,14 +87,21 @@ class VerificationCog(commands.Cog):
         try:
             msg = await interaction.user.send(
                 embed=embed,
-                view=StartWizardView(store, lambda: _support_ticket_text(self.bot.settings.support_channel_id), self._t),
+                view=StartWizardView(
+                    store,
+                    lambda: _support_ticket_text(config.support_channel_id),
+                    self._t,
+                    guild_id=guild_id,
+                ),
             )
             store.save_pending_wizard_view(msg.id, msg.channel.id, interaction.user.id, "StartWizardView")
             await interaction.followup.send(
                 _t.t(locale, "verification.dm_sent"),
                 ephemeral=True,
             )
-            log.info(f"[WIZARD] User {interaction.user.id} triggered verification via /verify command")
+            log.info(
+                f"[WIZARD] User {interaction.user.id} triggered verification via /verify command"
+            )
         except discord.Forbidden:
             await interaction.followup.send(
                 _t.t(locale, "verification.dm_failed"),

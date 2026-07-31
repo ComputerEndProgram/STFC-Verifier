@@ -2,7 +2,7 @@
 
 A multi-profile Discord bot for verifying STFC (Star Trek Fleet Command) accounts via [stfc.pro](https://stfc.pro) / [stfc.wtf](https://stfc.wtf) player data.
 
-One codebase, three verification profiles selected at runtime via `BOT_PROFILE`.
+One codebase, one bot process, many servers. Each server's verification profile (`stfc_verifier`, `stfc_verifier_alliance`, or `veil_security`) and its channel/role settings are stored per-guild in a shared SQLite database and edited through the built-in admin web UI.
 
 ## Profiles
 
@@ -25,64 +25,58 @@ cp .env.example .env
 # Run
 python3 -m bot.main
 # Or, if installed via pip install .
-dtb-verifier
+verifier
 ```
 
 ## Environment Variables
 
 See [`.env.example`](.env.example) for the full annotated template.
 
-### Required for all profiles
-
-| Variable | Description |
-|---|---|
-| `DISCORD_TOKEN` | Bot token from the [Discord Developer Portal](https://discord.com/developers/applications) |
-| `BOT_PROFILE` | One of: `stfc_verifier`, `stfc_verifier_alliance`, `veil_security` |
-| `GUILD_ID` | Your Discord server ID |
-| `VERIFY_CHANNEL_ID` | Channel where `/verify` and the verification button are available |
-| `ADMIN_ROLE_ID` | Role required for admin commands and rank confirmations |
-
-### Channels
-
-| Variable | Description |
-|---|---|
-| `LOG_CHANNEL_ID` | Channel for verification logs, rank confirmations, and recall audit trails. If unset, logging is silently skipped. |
-| `SUPPORT_CHANNEL_ID` | Channel mentioned in support ticket prompts (`"Open a ticket in #support"`). Falls back to generic text if unset. |
-
-### Roles
-
-| Variable | Description |
-|---|---|
-| `VERIFIED_ROLE_ID` | Role given to every user after successful verification |
-| `MEMBER_ROLE_ID` | **STFC** — base member role assigned on verification |
-| `COMMODORE_ROLE_ID` | **STFC** — assigned after admin confirmation |
-| `ADMIRAL_ROLE_ID` | **STFC** — assigned after admin confirmation |
-| `OPS71_PLUS_ROLE_ID` | **Veil Security** — role for players meeting the OPS level threshold |
-
-### Profile-specific criteria
-
-| Variable | Required by | Description |
-|---|---|---|
-| `STFC_SERVER_NUMBER` | `stfc_verifier`, `stfc_verifier_alliance` | Players not on this server are rejected |
-| `MINIMUM_OPS_LEVEL` | `veil_security` | Minimum OPS level to receive the OPS 71+ role |
-
-### Behavior
-
 | Variable | Default | Description |
 |---|---|---|
-| `UPDATE_CHECK_HOURS` | `24` | Hours between automatic player data refresh checks |
-| `REQUIRE_SCREENSHOT` | `true` | Require a screenshot upload during the verification wizard |
-| `DEFAULT_LANGUAGE` | `en` | Language for the verification wizard UI |
+| `DISCORD_TOKEN` | — | Bot token from the [Discord Developer Portal](https://discord.com/developers/applications) |
 | `DEBUG` | `0` | Enable verbose debug logging |
+| `DEFAULT_LANGUAGE` | `en` | Fallback language for the verification wizard UI |
+| `SESSION_TTL_HOURS` | `168` | Hours a verification wizard session stays alive |
+
+Per-server settings (profile, channels, roles, criteria) are **not** env vars anymore — they live in the `guild_configs` table of the database and are managed through the admin web UI.
 
 ### Database
 
-By default, the bot creates a SQLite database at `data/{BOT_PROFILE}_{GUILD_ID}.sqlite3`. Override with:
+By default, the bot creates a single SQLite database at `data/verifier.sqlite3`, shared by all guilds. Override with:
 
 | Variable | Description |
 |---|---|
 | `SQLITE_PATH` | Absolute path to a SQLite file |
 | `DATABASE_URL` | `sqlite:///` URL to a SQLite file |
+
+## Admin Web UI
+
+An optional separate process lets server admins view and edit each guild's configuration over Discord OAuth2 login. It uses the same database as the bot, and saved changes are picked up by the running bot without a restart.
+
+### Required env vars
+
+`DISCORD_CLIENT_ID`, `DISCORD_CLIENT_SECRET`, and `ADMIN_WEB_SESSION_SECRET` (see `.env.example`). In the Discord Developer Portal, register the redirect URL `{ADMIN_WEB_BASE_URL}/auth/callback`.
+
+### Run
+
+```bash
+python3 -m admin_web
+# Or, if installed via pip install .
+verifier-admin-web
+```
+
+### What you can configure per server
+
+- **Profile** — `stfc_verifier` / `stfc_verifier_alliance` / `veil_security`
+- **Channels** — verify, log, support (IDs)
+- **Roles** — verified, unverified, member, commodore, admiral, admin, ops71+ (IDs)
+- **Criteria** — minimum OPS level, STFC server number, update check hours
+- **Switches** — require screenshot, manage alliance roles
+
+### Access control
+
+Anyone can log in, but only users with **Manage Server** (or **Administrator**) permission in a guild — plus the bot and the user being members of that guild — can view or edit that guild's config. Permissions are re-checked against Discord on every page load and save.
 
 ## Commands
 
@@ -94,7 +88,7 @@ By default, the bot creates a SQLite database at `data/{BOT_PROFILE}_{GUILD_ID}.
 
 ### Admin commands
 
-All admin commands require the `ADMIN_ROLE_ID` role.
+All admin commands require the guild's configured admin role.
 
 | Command | Description |
 |---|---|
@@ -108,7 +102,7 @@ All admin commands require the `ADMIN_ROLE_ID` role.
 2. Bot sends a DM with the welcome embed and a **Start Verification** button
 3. User sends their stfc.pro/stfc.wtf player link
 4. Bot fetches fresh player data from stfc.pro (username, level, server, alliance, rank)
-5. *(Optional)* User uploads a screenshot (skipped if `REQUIRE_SCREENSHOT=false`)
+5. *(Optional)* User uploads a screenshot (skipped when the guild's `require_screenshot` setting is off)
 6. Bot shows a summary; user clicks **Complete**
 7. Bot sets the nickname, assigns roles, stores player data, and logs to the log channel
 8. For Commodore/Admiral ranks, a confirmation embed is posted to the log channel for admin approval
@@ -134,26 +128,35 @@ python3 -m pytest -q
 ```
 bot/
 ├── main.py                    # Entry point
-├── launcher.py                # Profile-based dynamic dispatch
+├── launcher.py                # Builds and runs the merged app
 ├── config/
 │   ├── settings.py            # Settings from .env
+│   ├── guild_config.py        # Per-guild config dataclass (stored in DB)
 │   └── profiles.py            # Profile registry
 ├── core/
 │   ├── bot_base.py            # BaseBot — shared verification logic
-│   ├── store.py               # SQLite store (ProfileStore)
+│   ├── store.py               # SQLite store (ProfileStore) with config cache
 │   ├── views.py               # Discord UI views (wizards, confirmations)
 │   ├── verification/          # Session flow and step constants
-│   ├── sessions/              # New-style session store (WIP)
+│   ├── sessions/              # Session store
 │   ├── roles/                 # Role assignment
 │   ├── persistence/           # Database helpers
 │   └── i18n/                  # Translation system
 ├── cogs/
 │   ├── verification.py        # /verify command
 │   └── admin.py               # /admin commands (verify, recall, send_button)
-├── profiles/                  # New-style profile protocol (WIP)
-├── legacy_profiles/           # Running bot implementations
+├── profiles/                  # Per-guild verification profiles
 │   ├── stfc_verifier/
 │   ├── stfc_verifier_alliance/
 │   └── veil_security/
+├── legacy_profiles/           # Shared STFC scraper (stfc_verifier/stfc_scraper.py)
 └── i18n/                      # Translation JSON files (22 languages)
+
+admin_web/                     # Admin web UI (separate process)
+├── app.py                     # FastAPI app + routes
+├── auth.py                    # Discord OAuth2 + per-request permission checks
+├── forms.py                   # GuildConfig-derived edit form
+├── sessions.py                # Server-side session store
+├── static/lcars.css           # LCARS visual theme
+└── templates/                 # Jinja2 templates
 ```

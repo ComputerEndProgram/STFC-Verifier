@@ -1,0 +1,16 @@
+{% extends "base.html" %}
+{% block content %}
+<p class="muted">
+  Sign in with Discord. You will see servers where the verification bot is present
+  and you have <strong>Manage Server</strong> or <strong>Administrator</strong> permission.
+</p>
+{% if error %}
+  <p class="lcars-flash lcars-flash--error">Login failed: {{ error }}</p>
+{% endif %}
+<div style="margin-top: 1.25rem">
+  <a class="lcars-pill" href="/auth/login">Continue with Discord</a>
+</div>
+<p class="tiny muted" style="margin-top: 1.25rem">
+  Slash commands still work in Discord — this UI is an addition.
+</p>
+{% endblock %}

@@ -13,6 +13,5 @@ def test_translator_interpolates_values() -> None:
 
 def test_translator_falls_back_to_english() -> None:
     translator = Translator(default_language="en")
-    message = translator.t("de", "verification.complete")
+    message = translator.t("nonexistent_lang", "verification.complete")
     assert message == "Verification complete."
-

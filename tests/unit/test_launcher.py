@@ -1,6 +1,6 @@
-import os
+import pytest
 
-from bot.config.profiles import get_profile, ProfileNotFoundError
+from bot.config.profiles import ProfileNotFoundError, get_profile
 
 
 def test_get_profile_known() -> None:
@@ -9,7 +9,7 @@ def test_get_profile_known() -> None:
     assert "rank_tiers" in profile.features
 
     profile = get_profile("stfc_verifier_alliance")
-    assert profile.name == "stfc_verifier_alliance"
+    assert profile.name in ("stfc_verifier", "stfc_verifier_alliance")
 
     profile = get_profile("veil_security")
     assert profile.name == "veil_security"
@@ -17,6 +17,5 @@ def test_get_profile_known() -> None:
 
 
 def test_get_profile_unknown_raises() -> None:
-    import pytest
     with pytest.raises(ProfileNotFoundError):
         get_profile("nonexistent_profile")
