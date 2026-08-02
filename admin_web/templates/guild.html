@@ -29,6 +29,10 @@
                   {{ profile_label or values[f.name] }}
                 {% elif f.kind == 'checkbox' %}
                   {{ 'On' if values[f.name] else 'Off' }}
+                {% elif f.kind == 'channel' and values[f.name] %}
+                  {{ channel_names.get(values[f.name], values[f.name]) }}
+                {% elif f.kind == 'role' and values[f.name] %}
+                  {{ role_names.get(values[f.name], values[f.name]) }}
                 {% elif values[f.name] %}
                   {{ values[f.name] }}
                 {% else %}

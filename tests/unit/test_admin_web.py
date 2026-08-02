@@ -180,7 +180,7 @@ def test_display_section_filtered_by_profile(client):
     assert res.status_code == 303
     res = client.get("/guilds/111")
     display = res.text.split("Edit config")[0]
-    assert "OPS 71+ role ID" in display
+    assert "OPS Level Role" in display
     assert "Minimum OPS level" in display
     assert "Member role ID" not in display
     assert "Manage alliance roles" not in display

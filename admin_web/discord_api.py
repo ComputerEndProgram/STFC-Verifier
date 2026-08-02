@@ -111,16 +111,20 @@ class DiscordAPI:
         )
         return f"{OAUTH_AUTHORIZE_URL}?{params}"
 
-    def bot_invite_url(self) -> str:
-        """OAuth2 URL to invite the bot into a server."""
-        params = urlencode(
-            {
-                "client_id": self.client_id,
-                "permissions": BOT_PERMISSIONS,
-                "scope": BOT_OAUTH_SCOPE,
-            }
-        )
-        return f"{OAUTH_AUTHORIZE_URL}?{params}"
+    def bot_invite_url(self, guild_id: int | None = None) -> str:
+        """OAuth2 URL to invite the bot into a server.
+
+        When ``guild_id`` is given it is added to the URL so Discord
+        preselects that server in the invite flow.
+        """
+        params = {
+            "client_id": self.client_id,
+            "permissions": BOT_PERMISSIONS,
+            "scope": BOT_OAUTH_SCOPE,
+        }
+        if guild_id is not None:
+            params["guild_id"] = str(guild_id)
+        return f"{OAUTH_AUTHORIZE_URL}?{urlencode(params)}"
 
     async def _token_request(self, data: dict) -> dict:
         headers = {"Content-Type": "application/x-www-form-urlencoded"}

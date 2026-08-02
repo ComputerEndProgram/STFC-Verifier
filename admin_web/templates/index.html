@@ -10,34 +10,64 @@
     </div>
   </section>
 {% else %}
-  <section class="lcars-section">
-    <div class="lcars-text-bar lcars-text-bar--a5">Manageable · {{ guilds | length }}</div>
-    <div class="lcars-section-body">
-      <ul class="guild-list">
-        {% for guild in guilds %}
-          <li>
-            {% if guild.bot_present %}
+  {% if configured_guilds | length > 0 %}
+    <section class="lcars-section">
+      <div class="lcars-text-bar lcars-text-bar--a5">Configured · {{ configured_guilds | length }}</div>
+      <div class="lcars-section-body">
+        <ul class="guild-list">
+          {% for guild in configured_guilds %}
+            <li>
               <a class="guild-link" href="/guilds/{{ guild.id }}">
-            {% else %}
-              <a class="guild-link guild-link--absent" href="{{ invite_url }}" target="_blank" rel="noopener">
-            {% endif %}
-              <span class="guild-link-body">
-                <strong>{{ guild.name }}</strong>
-                <span class="muted">
-                  {% if not guild.bot_present %}
-                    Bot not in this server — click to add it
-                  {% elif guild.configured %}
-                    {{ guild.profile }} · configured
-                  {% else %}
-                    Not configured
-                  {% endif %}
+                <span class="guild-link-body">
+                  <strong>{{ guild.name }}</strong>
+                  <span class="muted">{{ guild.profile }} · configured</span>
                 </span>
-              </span>
-            </a>
-          </li>
-        {% endfor %}
-      </ul>
-    </div>
-  </section>
+              </a>
+            </li>
+          {% endfor %}
+        </ul>
+      </div>
+    </section>
+  {% endif %}
+
+  {% if unconfigured_guilds | length > 0 %}
+    <section class="lcars-section">
+      <div class="lcars-text-bar lcars-text-bar--a6">Bot present, not configured · {{ unconfigured_guilds | length }}</div>
+      <div class="lcars-section-body">
+        <ul class="guild-list">
+          {% for guild in unconfigured_guilds %}
+            <li>
+              <a class="guild-link" href="/guilds/{{ guild.id }}">
+                <span class="guild-link-body">
+                  <strong>{{ guild.name }}</strong>
+                  <span class="muted">Not configured</span>
+                </span>
+              </a>
+            </li>
+          {% endfor %}
+        </ul>
+      </div>
+    </section>
+  {% endif %}
+
+  {% if absent_guilds | length > 0 %}
+    <section class="lcars-section">
+      <div class="lcars-text-bar lcars-text-bar--a8">Bot not in server · {{ absent_guilds | length }}</div>
+      <div class="lcars-section-body">
+        <ul class="guild-list">
+          {% for guild in absent_guilds %}
+            <li>
+              <a class="guild-link guild-link--absent" href="{{ guild.invite_url }}" target="_blank" rel="noopener">
+                <span class="guild-link-body">
+                  <strong>{{ guild.name }}</strong>
+                  <span class="muted">Bot not in this server — click to add it</span>
+                </span>
+              </a>
+            </li>
+          {% endfor %}
+        </ul>
+      </div>
+    </section>
+  {% endif %}
 {% endif %}
 {% endblock %}

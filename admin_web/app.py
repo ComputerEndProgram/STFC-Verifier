@@ -275,7 +275,6 @@ async def guild_picker(request: Request):
     guilds = await ctx.accessible_guilds(request, session)
     bot_ids = await ctx.bot_guild_ids(request)
     configs = {config.guild_id: config for config in ctx.store.get_all_guild_configs()}
-    invite_url = ctx.discord.bot_invite_url()
 
     rows = []
     for guild in guilds:
@@ -289,9 +288,14 @@ async def guild_picker(request: Request):
                 "profile": _profile_label(config.bot_profile) if config else None,
                 "configured": config is not None,
                 "bot_present": gid in bot_ids,
+                "invite_url": ctx.discord.bot_invite_url(gid),
             }
         )
     rows.sort(key=lambda r: r["name"].lower())
+
+    configured = [r for r in rows if r["configured"]]
+    unconfigured = [r for r in rows if r["bot_present"] and not r["configured"]]
+    absent = [r for r in rows if not r["bot_present"]]
 
     nav_top, nav_bottom = _user_nav(session)
     return _render(
@@ -303,8 +307,10 @@ async def guild_picker(request: Request):
         nav_bottom=nav_bottom,
         actions=_logout_actions(),
         guilds=rows,
+        configured_guilds=configured,
+        unconfigured_guilds=unconfigured,
+        absent_guilds=absent,
         user=session.user,
-        invite_url=invite_url,
     )
 
 
@@ -315,6 +321,8 @@ async def guild_page(request: Request, guild_id: int, saved: int = 0):
     guild = await ctx.require_guild(request, guild_id)
     config = ctx.store.get_guild_config(guild_id)
     channels, roles = await _guild_lookup_options(ctx, guild_id)
+    channel_names = {c["id"]: c["name"] for c in channels}
+    role_names = {r["id"]: r["name"] for r in roles}
 
     nav_top, nav_bottom = _user_nav(session)
     status = "configured" if config else "unconfigured"
@@ -341,6 +349,8 @@ async def guild_page(request: Request, guild_id: int, saved: int = 0):
         display_groups=build_form_spec(config.bot_profile if config else None),
         channels=channels,
         roles=roles,
+        channel_names=channel_names,
+        role_names=role_names,
         csrf_token=session.csrf_token,
         saved=bool(saved),
         profile_label=_profile_label(config.bot_profile) if config else None,
@@ -363,6 +373,8 @@ async def guild_config_save(request: Request, guild_id: int):
     except ConfigParseError as exc:
         config = ctx.store.get_guild_config(guild_id)
         channels, roles = await _guild_lookup_options(ctx, guild_id)
+        channel_names = {c["id"]: c["name"] for c in channels}
+        role_names = {r["id"]: r["name"] for r in roles}
         nav_top, nav_bottom = _user_nav(session)
         nav_bottom.insert(0, {"label": "Error", "color": "alert"})
         return _render(
@@ -381,6 +393,8 @@ async def guild_config_save(request: Request, guild_id: int):
             display_groups=build_form_spec(config.bot_profile if config else None),
             channels=channels,
             roles=roles,
+            channel_names=channel_names,
+            role_names=role_names,
             csrf_token=session.csrf_token,
             saved=False,
             form_error=str(exc),
