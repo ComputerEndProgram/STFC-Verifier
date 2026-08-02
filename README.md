@@ -16,20 +16,27 @@ One codebase, one bot process, many servers. Each server's verification profile 
 
 Requires Python 3.11+. Either installer works — [uv](https://docs.astral.sh/uv/) (recommended) or pip.
 
-```bash
 # Option A: uv (recommended) — installs deps + creates .venv from the lockfile
+```bash
 uv sync --extra dev
+```
 
 # Option B: pip
+```bash
 python3 -m venv .venv
 .venv/bin/pip install -e ".[dev]"
+```
 
 # Configure
+```bash
 cp .env.example .env
+```
 # Edit .env — see below for required variables
 
 # Run
+```bash
 .venv/bin/stfc-verifier
+```
 
 Note: on this machine `/usr/bin/python3.13` is a custom build without `ensurepip`,
 so create the venv with `--without-pip` and bootstrap pip via `get-pip.py`
