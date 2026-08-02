@@ -8,7 +8,6 @@
   "verification.dm_failed": "❌ Δεν μπόρεσα να σου στείλω DM. Ενεργοποίησε τα DM από μέλη του server και δοκίμασε ξανά.",
   "verification.server_wrong": "❌ Ο χαρακτήρας σου πρέπει να βρίσκεται στον STFC Server {server_id}. Αυτή τη στιγμή βρίσκεσαι στον Server {current_server}.",
   "verification.player_id_taken": "❌ Αυτός ο λογαριασμός παίκτη STFC έχει ήδη συνδεθεί με άλλον χρήστη Discord. Κάθε λογαριασμός παίκτη μπορεί να επαληθευτεί μόνο μία φορά.",
-  "verification.recall_button": "Κάνε κλικ στο κουμπί παρακάτω για να ξεκινήσεις ξανά την επαλήθευση",
   "wizard.welcome.title": "👋 Καλώς ήρθες στην Επαλήθευση STFC!",
   "wizard.welcome.description": "Για να αποκτήσεις πρόσβαση στις λειτουργίες του server, πρέπει να επαληθεύσεις τον λογαριασμό σου στο STFC.",
   "wizard.welcome.field_what": "Τι είναι αυτό;",

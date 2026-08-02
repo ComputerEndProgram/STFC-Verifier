@@ -1,4 +1,4 @@
-"""FastAPI admin web UI for the Merged-Verifier bot.
+"""FastAPI admin web UI for the STFC Verifier bot.
 
 Served as a separate process from the bot. Reads/writes the same SQLite
 database as the bot (via bot.core.store.ProfileStore) and relies on the

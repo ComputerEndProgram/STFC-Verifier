@@ -5,12 +5,11 @@ import discord
 from discord import app_commands
 from discord.ext import commands
 
-from bot.config.guild_config import GuildConfig
-from bot.config.profiles import PROFILE_REGISTRY, get_profile
 from bot.core.i18n.translator import Translator
 from bot.core.store import _support_ticket_text
 from bot.core.views import ChannelStartView, StartWizardView
-from bot.legacy_profiles.stfc_verifier.stfc_scraper import STFCProScraper, format_player_info
+from bot.config.profiles import get_profile
+from bot.core.stfc_scraper import STFCProScraper, format_player_info
 
 log = logging.getLogger("veil_bot")
 
@@ -38,169 +37,6 @@ class AdminCog(commands.Cog):
 
     admin = app_commands.Group(name="admin", description="Admin commands")
 
-    async def _handle_setup(
-        self,
-        interaction: discord.Interaction,
-        profile: str,
-        verify_channel: Optional[discord.TextChannel] = None,
-        log_channel: Optional[discord.TextChannel] = None,
-        support_channel: Optional[discord.TextChannel] = None,
-        verified_role: Optional[discord.Role] = None,
-        unverified_role: Optional[discord.Role] = None,
-        member_role: Optional[discord.Role] = None,
-        commodore_role: Optional[discord.Role] = None,
-        admiral_role: Optional[discord.Role] = None,
-        admin_role: Optional[discord.Role] = None,
-        ops71_plus_role: Optional[discord.Role] = None,
-        minimum_ops_level: Optional[int] = None,
-        stfc_server_number: Optional[int] = None,
-        manage_alliance_roles: Optional[bool] = None,
-    ):
-        if not interaction.guild:
-            return await interaction.response.send_message(
-                "❌ Setup command can only be used in a server.", ephemeral=True
-            )
-
-        if not interaction.user.guild_permissions.manage_guild and not interaction.user.guild_permissions.administrator:
-            return await interaction.response.send_message(
-                "❌ You need 'Manage Server' permission to run setup.", ephemeral=True
-            )
-
-        if profile not in PROFILE_REGISTRY:
-            valid_profiles = ", ".join(sorted(PROFILE_REGISTRY.keys()))
-            return await interaction.response.send_message(
-                f"❌ Invalid profile '{profile}'. Choose from: {valid_profiles}",
-                ephemeral=True,
-            )
-
-        guild_id = interaction.guild.id
-        existing = self.bot.get_guild_config(guild_id) or GuildConfig(guild_id=guild_id)
-
-        config = GuildConfig(
-            guild_id=guild_id,
-            bot_profile=profile,
-            verify_channel_id=verify_channel.id if verify_channel else existing.verify_channel_id,
-            log_channel_id=log_channel.id if log_channel else existing.log_channel_id,
-            support_channel_id=support_channel.id if support_channel else existing.support_channel_id,
-            verified_role_id=verified_role.id if verified_role else existing.verified_role_id,
-            unverified_role_id=unverified_role.id if unverified_role else existing.unverified_role_id,
-            member_role_id=member_role.id if member_role else existing.member_role_id,
-            commodore_role_id=commodore_role.id if commodore_role else existing.commodore_role_id,
-            admiral_role_id=admiral_role.id if admiral_role else existing.admiral_role_id,
-            admin_role_id=admin_role.id if admin_role else existing.admin_role_id,
-            ops71_plus_role_id=ops71_plus_role.id if ops71_plus_role else existing.ops71_plus_role_id,
-            minimum_ops_level=minimum_ops_level if minimum_ops_level is not None else existing.minimum_ops_level,
-            stfc_server_number=stfc_server_number if stfc_server_number is not None else existing.stfc_server_number,
-            manage_alliance_roles=manage_alliance_roles if manage_alliance_roles is not None else existing.manage_alliance_roles,
-        )
-
-        self.bot.save_guild_config(config)
-
-        summary = (
-            f"✅ **Server setup complete for {interaction.guild.name}!**\n"
-            f"• **Profile:** `{config.bot_profile}`\n"
-            f"• **Alliance Role Management:** `{config.manage_alliance_roles}`\n"
-        )
-        if config.stfc_server_number:
-            summary += f"• **STFC Server:** `{config.stfc_server_number}`\n"
-        if config.minimum_ops_level:
-            summary += f"• **Minimum OPS Level:** `{config.minimum_ops_level}`\n"
-        if config.verify_channel_id:
-            summary += f"• **Verify Channel:** <#{config.verify_channel_id}>\n"
-        if config.log_channel_id:
-            summary += f"• **Log Channel:** <#{config.log_channel_id}>\n"
-
-        await interaction.response.send_message(summary, ephemeral=True)
-        log.info(f"[SETUP] Configured server {guild_id} with profile {profile}")
-
-    @app_commands.command(name="setup", description="Configure bot settings for this server")
-    @app_commands.guild_only()
-    @app_commands.choices(
-        profile=[
-            app_commands.Choice(name="STFC Verifier (Rank/Alliance)", value="stfc_verifier"),
-            app_commands.Choice(name="Veil Security (OPS Level)", value="veil_security"),
-        ]
-    )
-    async def standalone_setup_cmd(
-        self,
-        interaction: discord.Interaction,
-        profile: str,
-        verify_channel: Optional[discord.TextChannel] = None,
-        log_channel: Optional[discord.TextChannel] = None,
-        support_channel: Optional[discord.TextChannel] = None,
-        verified_role: Optional[discord.Role] = None,
-        unverified_role: Optional[discord.Role] = None,
-        member_role: Optional[discord.Role] = None,
-        commodore_role: Optional[discord.Role] = None,
-        admiral_role: Optional[discord.Role] = None,
-        admin_role: Optional[discord.Role] = None,
-        ops71_plus_role: Optional[discord.Role] = None,
-        minimum_ops_level: Optional[int] = None,
-        stfc_server_number: Optional[int] = None,
-        manage_alliance_roles: Optional[bool] = None,
-    ):
-        await self._handle_setup(
-            interaction,
-            profile,
-            verify_channel,
-            log_channel,
-            support_channel,
-            verified_role,
-            unverified_role,
-            member_role,
-            commodore_role,
-            admiral_role,
-            admin_role,
-            ops71_plus_role,
-            minimum_ops_level,
-            stfc_server_number,
-            manage_alliance_roles,
-        )
-
-    @admin.command(name="setup", description="[ADMIN] Configure bot settings for this server")
-    @app_commands.guild_only()
-    @app_commands.choices(
-        profile=[
-            app_commands.Choice(name="STFC Verifier (Rank/Alliance)", value="stfc_verifier"),
-            app_commands.Choice(name="Veil Security (OPS Level)", value="veil_security"),
-        ]
-    )
-    async def admin_setup_cmd(
-        self,
-        interaction: discord.Interaction,
-        profile: str,
-        verify_channel: Optional[discord.TextChannel] = None,
-        log_channel: Optional[discord.TextChannel] = None,
-        support_channel: Optional[discord.TextChannel] = None,
-        verified_role: Optional[discord.Role] = None,
-        unverified_role: Optional[discord.Role] = None,
-        member_role: Optional[discord.Role] = None,
-        commodore_role: Optional[discord.Role] = None,
-        admiral_role: Optional[discord.Role] = None,
-        admin_role: Optional[discord.Role] = None,
-        ops71_plus_role: Optional[discord.Role] = None,
-        minimum_ops_level: Optional[int] = None,
-        stfc_server_number: Optional[int] = None,
-        manage_alliance_roles: Optional[bool] = None,
-    ):
-        await self._handle_setup(
-            interaction,
-            profile,
-            verify_channel,
-            log_channel,
-            support_channel,
-            verified_role,
-            unverified_role,
-            member_role,
-            commodore_role,
-            admiral_role,
-            admin_role,
-            ops71_plus_role,
-            minimum_ops_level,
-            stfc_server_number,
-            manage_alliance_roles,
-        )
-
     @admin.command(
         name="recall",
         description="[ADMIN] Recall a user's verification, remove all roles, and alert them",
@@ -226,7 +62,7 @@ class AdminCog(commands.Cog):
         if not config:
             if interaction.user.guild_permissions.manage_guild:
                 return await interaction.response.send_message(
-                    "⚠️ This server is not configured yet. Please run `/setup` first.",
+                    "⚠️ This server is not configured yet. Please configure it in the admin web UI.",
                     ephemeral=True,
                 )
             return await interaction.response.send_message(
@@ -339,6 +175,7 @@ class AdminCog(commands.Cog):
                     lambda: _support_ticket_text(config.support_channel_id),
                     self._t,
                     guild_id=guild.id,
+                    locale=locale,
                 ),
             )
             store.save_pending_wizard_view(msg.id, msg.channel.id, member.id, "StartWizardView")
@@ -400,7 +237,7 @@ class AdminCog(commands.Cog):
         if not config:
             if interaction.user.guild_permissions.manage_guild:
                 return await interaction.response.send_message(
-                    "⚠️ This server is not configured yet. Please run `/setup` first.",
+                    "⚠️ This server is not configured yet. Please configure it in the admin web UI.",
                     ephemeral=True,
                 )
             return await interaction.response.send_message(
@@ -591,7 +428,7 @@ class AdminCog(commands.Cog):
         if not config:
             if interaction.user.guild_permissions.manage_guild:
                 return await interaction.response.send_message(
-                    "⚠️ This server is not configured yet. Please run `/setup` first.",
+                    "⚠️ This server is not configured yet. Please configure it in the admin web UI.",
                     ephemeral=True,
                 )
             return await interaction.response.send_message(

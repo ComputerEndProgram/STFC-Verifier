@@ -1,7 +1,11 @@
+import asyncio
+
+import httpx
 import pytest
 from starlette.testclient import TestClient
 
 from admin_web.app import app
+from admin_web.discord_api import DiscordAPI
 from bot.core.store import ProfileStore
 from bot.config.guild_config import GuildConfig
 
@@ -21,7 +25,7 @@ def _guild(gid: int, name: str, permissions: int, owner: bool = False) -> dict:
     }
 
 
-def _install_discord_mocks(client, user_guilds, bot_ids) -> None:
+def _install_discord_mocks(client, user_guilds, bot_ids, guild_channels=(), guild_roles=()) -> None:
     discord = client.app.state.discord
 
     async def get_user_guilds(access_token):
@@ -30,8 +34,16 @@ def _install_discord_mocks(client, user_guilds, bot_ids) -> None:
     async def get_bot_guild_ids():
         return set(bot_ids)
 
+    async def get_guild_channels(guild_id):
+        return list(guild_channels)
+
+    async def get_guild_roles(guild_id):
+        return list(guild_roles)
+
     discord.get_user_guilds = get_user_guilds
     discord.get_bot_guild_ids = get_bot_guild_ids
+    discord.get_guild_channels = get_guild_channels
+    discord.get_guild_roles = get_guild_roles
 
 
 def _login(client) -> None:
@@ -94,6 +106,75 @@ def test_guild_page_renders_config_and_form(client):
     assert 'name="csrf_token"' in res.text
 
 
+def test_profile_options_use_renamed_labels(client):
+    _standard_world(client)
+    res = client.get("/guilds/111")
+    assert "Verifier for Server Guilds" in res.text
+    assert "Verifier for Alliance Guilds" in res.text
+    assert "OPS Level Verifier" in res.text
+
+
+def test_form_fields_tagged_with_profiles(client):
+    _standard_world(client)
+    res = client.get("/guilds/111")
+    assert (
+        'data-field="bot_profile" data-profiles="stfc_verifier stfc_verifier_alliance veil_security"'
+        in res.text
+    )
+    assert (
+        'data-field="member_role_id" data-profiles="stfc_verifier stfc_verifier_alliance"'
+        in res.text
+    )
+    assert 'data-field="ops71_plus_role_id" data-profiles="veil_security"' in res.text
+    assert (
+        'data-field="verify_channel_id" data-profiles="stfc_verifier stfc_verifier_alliance veil_security"'
+        in res.text
+    )
+
+
+def test_channel_role_search_fields_populated(client):
+    """Channel/role fields are backed by searchable options from Discord."""
+    _install_discord_mocks(
+        client,
+        [_guild(111, "Alpha", MANAGE_GUILD)],
+        bot_ids={111},
+        guild_channels=[
+            {"id": "1111", "name": "verify", "type": 0},
+            {"id": "1112", "name": "General Voice", "type": 2},
+            {"id": "1113", "name": "announce", "type": 5},
+        ],
+        guild_roles=[
+            {"id": "2222", "name": "Member"},
+            {"id": "111", "name": "@everyone"},
+        ],
+    )
+    _login(client)
+    res = client.get("/guilds/111")
+    assert 'value="1111">#verify' in res.text
+    assert 'value="1113">#announce' in res.text
+    assert 'value="2222">@Member' in res.text
+    assert 'list="channel_options"' in res.text
+    assert 'list="role_options"' in res.text
+    assert "#General Voice" not in res.text  # voice channels excluded
+    assert "@everyone" not in res.text  # @everyone excluded
+
+
+def test_display_section_filtered_by_profile(client):
+    """Current-config display shows only the fields the saved profile uses."""
+    session = _standard_world(client)
+    res = client.post(
+        "/guilds/111/config",
+        data={"csrf_token": session.csrf_token, "bot_profile": "veil_security"},
+    )
+    assert res.status_code == 303
+    res = client.get("/guilds/111")
+    display = res.text.split("Edit config")[0]
+    assert "OPS 71+ role ID" in display
+    assert "Minimum OPS level" in display
+    assert "Member role ID" not in display
+    assert "Manage alliance roles" not in display
+
+
 def test_guild_access_denied_without_permission_or_bot(client):
     _standard_world(client)
     assert client.get("/guilds/222").status_code == 403  # bot present, no permission
@@ -113,6 +194,7 @@ def test_save_config_updates_store_and_other_process(client):
             "minimum_ops_level": "71",
             "ops71_plus_role_id": "555333",
             "update_check_hours": "12",
+            "session_ttl_hours": "72",
             "require_screenshot": "on",
         },
     )
@@ -126,6 +208,8 @@ def test_save_config_updates_store_and_other_process(client):
     assert config.minimum_ops_level == 71
     assert config.require_screenshot is True
     assert config.manage_alliance_roles is False
+    assert config.update_check_hours == 12
+    assert config.session_ttl_hours == 72
 
     # A separate ProfileStore instance (simulating the running bot process)
     # must observe the change without a restart.
@@ -154,6 +238,54 @@ def test_save_config_rejects_invalid_profile(client):
     )
     assert res.status_code == 200
     assert "Invalid profile" in res.text
+
+
+def test_discord_api_retries_transient_errors():
+    """A transient 5xx from Discord is retried instead of failing the request."""
+    calls = {"n": 0}
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        calls["n"] += 1
+        if calls["n"] == 1:
+            return httpx.Response(500)
+        return httpx.Response(200, json=[{"id": "1", "name": "general", "type": 0}])
+
+    api = DiscordAPI(
+        client_id="1", client_secret="s", redirect_uri="x", bot_token="b", scopes="identify"
+    )
+
+    async def exercise():
+        api._client = httpx.AsyncClient(transport=httpx.MockTransport(handler))
+        out = await api.get_guild_channels(1)
+        assert out == [{"id": "1", "name": "general", "type": 0}]
+        assert calls["n"] == 2
+        await api.aclose()
+
+    asyncio.run(exercise())
+
+
+def test_discord_api_client_reused_across_requests():
+    """The shared httpx client must survive multiple exchanges (regression:
+    a closed client previously raised "Cannot reopen a client instance")."""
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        return httpx.Response(200, json={"access_token": "tok", "refresh_token": "ref"})
+
+    api = DiscordAPI(
+        client_id="1",
+        client_secret="s",
+        redirect_uri="http://testserver/auth/callback",
+        bot_token="b",
+        scopes="identify",
+    )
+
+    async def exercise():
+        api._client = httpx.AsyncClient(transport=httpx.MockTransport(handler))
+        await api.exchange_code("code-1")
+        await api.exchange_code("code-2")
+        await api.aclose()
+
+    asyncio.run(exercise())
 
 
 def test_logout_clears_session(client):

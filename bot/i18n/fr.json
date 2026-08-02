@@ -8,7 +8,6 @@
   "verification.dm_failed": "❌ Je n'ai pas pu vous envoyer de message privé. Veuillez activer les messages privés des membres du serveur et réessayer.",
   "verification.server_wrong": "❌ Votre personnage doit se trouver sur le serveur STFC {server_id}. Vous êtes actuellement sur le serveur {current_server}.",
   "verification.player_id_taken": "❌ Ce compte joueur STFC est déjà lié à un autre utilisateur Discord. Chaque compte joueur ne peut être vérifié qu'une seule fois.",
-  "verification.recall_button": "Cliquez sur le bouton ci-dessous pour recommencer la vérification",
   "wizard.welcome.title": "👋 Bienvenue dans la vérification STFC !",
   "wizard.welcome.description": "Pour accéder aux fonctionnalités du serveur, vous devez vérifier votre compte STFC.",
   "wizard.welcome.field_what": "De quoi s'agit-il ?",

@@ -5,7 +5,7 @@ import discord
 
 from bot.config.guild_config import GuildConfig
 from bot.core.verification.steps import FINALIZE_STEP, START_STEP, SUBMIT_STEP
-from bot.profiles.base import VerificationProfile, VerificationResult
+from bot.profiles.base import COMMON_CONFIG_FIELDS, VerificationProfile, VerificationResult
 
 log = logging.getLogger("veil_bot")
 
@@ -16,6 +16,10 @@ class VeilSecurityProfile(VerificationProfile):
     required_roles = ("ops71_plus_role_id",)
     optional_roles = ("verified_role_id", "admin_role_id")
     features = ("ops_level_check", "server_role_match")
+    config_fields = COMMON_CONFIG_FIELDS + (
+        "ops71_plus_role_id",
+        "minimum_ops_level",
+    )
 
     def build_steps(self) -> list[str]:
         return [START_STEP, SUBMIT_STEP, FINALIZE_STEP]
@@ -37,11 +41,11 @@ class VeilSecurityProfile(VerificationProfile):
             nick = nick[:32]
         return nick
 
-    def build_summary_embed(self, player_data, config: GuildConfig) -> discord.Embed:
+    def build_summary_embed(self, player_data, config: GuildConfig, translator, locale=None) -> discord.Embed:
         min_ops = config.minimum_ops_level or 71
         embed = discord.Embed(
-            title="✅ Step 3: Verify Information",
-            description="Please review your information below. If everything looks correct, click **Complete**.",
+            title=translator.t(locale, "wizard.summary_title"),
+            description=translator.t(locale, "wizard.summary_description"),
             colour=discord.Colour.gold(),
         )
         embed.add_field(name="Player Name", value=f"{player_data.username}", inline=True)
@@ -54,14 +58,14 @@ class VeilSecurityProfile(VerificationProfile):
             else f"❌ No (Level {player_data.level} < {min_ops})"
         )
         embed.add_field(name="Eligible for OPS 71+ Role", value=ops_eligible, inline=False)
-        embed.set_footer(text="Review the data above and click Complete or Restart")
+        embed.set_footer(text=translator.t(locale, "wizard.summary_footer"))
         return embed
 
     def build_log_embed(
-        self, member: discord.Member, player_data, session: dict
+        self, member: discord.Member, player_data, session: dict, translator, locale=None
     ) -> discord.Embed:
         embed = discord.Embed(
-            title="✅ Verification Successful",
+            title=translator.t(locale, "wizard.log_title"),
             description=f"**{member.mention}** verified as **{player_data.username}**",
             colour=discord.Colour.green(),
             timestamp=discord.utils.utcnow(),

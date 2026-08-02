@@ -33,7 +33,7 @@ class VerificationCog(commands.Cog):
         if not config:
             if interaction.user.guild_permissions.manage_guild:
                 await interaction.followup.send(
-                    "⚠️ The verification bot is not configured for this server yet. Please run `/setup` (or `/admin setup`) to configure it.",
+                    "⚠️ The verification bot is not configured for this server yet. Please configure it in the admin web UI.",
                     ephemeral=True,
                 )
             else:
@@ -92,6 +92,7 @@ class VerificationCog(commands.Cog):
                     lambda: _support_ticket_text(config.support_channel_id),
                     self._t,
                     guild_id=guild_id,
+                    locale=interaction.locale,
                 ),
             )
             store.save_pending_wizard_view(msg.id, msg.channel.id, interaction.user.id, "StartWizardView")

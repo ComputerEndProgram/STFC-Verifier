@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import logging
 import secrets
 
 from fastapi import Request
@@ -9,6 +10,8 @@ from admin_web.discord_api import DiscordAPI, DiscordAPIError, has_manage_guild
 from admin_web.sessions import AdminSession, SessionStore
 from admin_web.config import AdminWebConfig
 from bot.core.store import ProfileStore
+
+log = logging.getLogger("admin_web")
 
 STATE_COOKIE = "admin_web_oauth_state"
 STATE_TTL_SECONDS = 600
@@ -40,8 +43,16 @@ class AdminContext:
 
     # -- OAuth state -------------------------------------------------------
 
-    def make_state(self) -> str:
-        return self.serializer.dumps({"state": secrets.token_urlsafe(16)})
+    def make_state(self) -> tuple[str, str]:
+        """Return (inner_state, signed_token).
+
+        The inner state goes to Discord as the OAuth ``state`` parameter;
+        the signed token is stored in the cookie. On the callback Discord
+        echoes back the inner state, which is compared against the token.
+        """
+        inner = secrets.token_urlsafe(16)
+        token = self.serializer.dumps({"state": inner})
+        return inner, token
 
     def verify_state(self, cookie_state: str, returned_state: str) -> bool:
         try:
@@ -117,6 +128,9 @@ class AdminContext:
                         pass
                 self.sessions.delete(session.token)
                 raise LoginRequired()
+            log.warning(
+                "Discord permission check failed for user %s: %s", session.user_id, exc
+            )
             raise AccessDenied(
                 "Could not reach Discord to verify your permissions — try again later."
             ) from exc

@@ -6,7 +6,7 @@ import discord
 from bot.config.guild_config import GuildConfig
 from bot.core.verification.steps import FINALIZE_STEP, START_STEP, SUBMIT_STEP
 from bot.core.views import RankConfirmationView
-from bot.profiles.base import VerificationProfile, VerificationResult
+from bot.profiles.base import COMMON_CONFIG_FIELDS, VerificationProfile, VerificationResult
 
 log = logging.getLogger("veil_bot")
 
@@ -30,6 +30,13 @@ class STFCVerifierProfile(VerificationProfile):
     required_roles = ("member_role_id", "commodore_role_id", "admiral_role_id")
     optional_roles = ("verified_role_id", "admin_role_id")
     features = ("rank_tiers", "alliance_roles", "server_check", "rank_confirmation")
+    config_fields = COMMON_CONFIG_FIELDS + (
+        "member_role_id",
+        "commodore_role_id",
+        "admiral_role_id",
+        "stfc_server_number",
+        "manage_alliance_roles",
+    )
 
     def build_steps(self) -> list[str]:
         return [START_STEP, SUBMIT_STEP, FINALIZE_STEP]
@@ -51,10 +58,10 @@ class STFCVerifierProfile(VerificationProfile):
             nick = nick[:32]
         return nick
 
-    def build_summary_embed(self, player_data, config: GuildConfig) -> discord.Embed:
+    def build_summary_embed(self, player_data, config: GuildConfig, translator, locale=None) -> discord.Embed:
         embed = discord.Embed(
-            title="✅ Step 3: Verify Information",
-            description="Please review your information below. If everything looks correct, click **Complete**.",
+            title=translator.t(locale, "wizard.summary_title"),
+            description=translator.t(locale, "wizard.summary_description"),
             colour=discord.Colour.gold(),
         )
         embed.add_field(name="Player Name", value=f"{player_data.username}", inline=True)
@@ -62,14 +69,14 @@ class STFCVerifierProfile(VerificationProfile):
         embed.add_field(name="Server", value=f"{player_data.server}", inline=True)
         embed.add_field(name="Alliance", value=player_data.alliance_tag or "None", inline=True)
         embed.add_field(name="Rank", value=getattr(player_data, "rank", "Unknown"), inline=True)
-        embed.set_footer(text="Review the data above and click Complete or Restart")
+        embed.set_footer(text=translator.t(locale, "wizard.summary_footer"))
         return embed
 
     def build_log_embed(
-        self, member: discord.Member, player_data, session: dict
+        self, member: discord.Member, player_data, session: dict, translator, locale=None
     ) -> discord.Embed:
         embed = discord.Embed(
-            title="✅ Verification Successful",
+            title=translator.t(locale, "wizard.log_title"),
             description=f"**{member.mention}** verified as **{player_data.username}**",
             colour=discord.Colour.green(),
             timestamp=discord.utils.utcnow(),
@@ -95,8 +102,12 @@ class STFCVerifierProfile(VerificationProfile):
         stfc_server_id = config.stfc_server_number
         if stfc_server_id and player_data.server != stfc_server_id:
             await interaction.followup.send(
-                f"❌ Your character must be on STFC Server {stfc_server_id}. "
-                f"You are currently on Server {player_data.server}.",
+                bot._t.t(
+                    interaction.locale,
+                    "verification.server_wrong",
+                    server_id=stfc_server_id,
+                    current_server=player_data.server,
+                ),
                 ephemeral=True,
             )
             log.warning(
@@ -133,6 +144,7 @@ class STFCVerifierProfile(VerificationProfile):
                         player_data.username, player_data.alliance_tag or "N/A",
                         config, bot.store, lambda: guild,
                         bot._t,
+                        locale=interaction.locale,
                     )
                     role_name = "Commodore" if rank_tier == "commodore" else "Admiral"
                     feedback.append(f"⏳ {role_name} role pending admin confirmation...")
@@ -287,11 +299,12 @@ class STFCVerifierProfile(VerificationProfile):
                 player_data.username, player_data.alliance_tag or "N/A",
                 config, bot.store, lambda: guild,
                 bot._t,
+                locale=getattr(member.guild, "preferred_locale", None),
             )
             admin_ping = f"<@&{config.admin_role_id}>" if config.admin_role_id else "Admins"
             alliance_display = f"[{player_data.alliance_tag}]" if player_data.alliance_tag else "N/A"
             confirm_embed = discord.Embed(
-                title="🔔 Rank Change Detected - Confirmation Required",
+                title=bot._t.t(None, "wizard.log_update_confirm_title"),
                 description=f"{admin_ping}, please confirm this rank change.",
                 color=discord.Color.orange(),
             )

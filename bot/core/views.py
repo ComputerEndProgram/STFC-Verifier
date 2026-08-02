@@ -9,13 +9,18 @@ from bot.core.store import ProfileStore, _support_ticket_text
 
 log = logging.getLogger("veil_bot")
 
+DEFAULT_SESSION_TTL_HOURS = 168
+
 
 class ChannelStartView(discord.ui.View):
     """Persistent view posted in the verify channel. DMs the user with the
     real StartWizardView when clicked, so the channel message stays intact."""
 
-    def __init__(self):
+    def __init__(self, translator: Optional[Translator] = None):
         super().__init__(timeout=None)
+        self._t = translator
+        if translator:
+            self.start_button.label = translator.t(None, "view.start_wizard")
 
     @discord.ui.button(
         label="Start Verification",
@@ -63,7 +68,7 @@ class ChannelStartView(discord.ui.View):
             return
 
         await interaction.response.send_message(
-            "✅ Verification wizard sent to your DMs!",
+            t.t(locale, "verification.dm_sent"),
             ephemeral=True,
         )
 
@@ -97,6 +102,7 @@ class ChannelStartView(discord.ui.View):
                     lambda: _support_ticket_text(config.support_channel_id),
                     t,
                     guild_id=guild_id,
+                    locale=locale,
                 ),
             )
             store.save_pending_wizard_view(msg.id, msg.channel.id, user.id, "StartWizardView")
@@ -114,14 +120,17 @@ class StartWizardView(discord.ui.View):
         support_ticket_fn: Callable[[], str],
         translator: Translator,
         guild_id: Optional[int] = None,
+        locale: Optional[str] = None,
     ):
         super().__init__(timeout=None)
         self._store = store
         self._support_ticket = support_ticket_fn
         self._t = translator
         self.guild_id = guild_id
+        self.locale = locale
         self.confirmation_message_id = None
         self.confirmation_channel_id = None
+        self.start_button.label = translator.t(locale, "view.start_wizard")
 
     @discord.ui.button(
         label="Start Verification",
@@ -144,7 +153,10 @@ class StartWizardView(discord.ui.View):
             log.info(f"[WIZARD] User {user_id} attempted re-verification (already verified)")
             return
 
-        self._store.create_wizard_session(user_id, guild_id=self.guild_id)
+        config = self._store.get_guild_config(self.guild_id) if self.guild_id else None
+        ttl_hours = config.session_ttl_hours if config else DEFAULT_SESSION_TTL_HOURS
+
+        self._store.create_wizard_session(user_id, guild_id=self.guild_id, ttl_hours=ttl_hours)
         log.info(f"[WIZARD] Created session for user {user_id} (guild: {self.guild_id})")
 
         self._store.delete_pending_wizard_views_by_user(user_id)
@@ -158,7 +170,10 @@ class StartWizardView(discord.ui.View):
             colour=discord.Colour.blue(),
         )
         embed.set_footer(text=self._t.t(locale, "wizard.step1.footer"))
-        await interaction.followup.send(embed=embed)
+        await interaction.followup.send(
+            content=self._t.t(locale, "verification.start"),
+            embed=embed,
+        )
         if self.confirmation_message_id:
             try:
                 self._store.delete_pending_wizard_view(self.confirmation_message_id)
@@ -168,13 +183,20 @@ class StartWizardView(discord.ui.View):
 
 
 class SkipStepsView(discord.ui.View):
-    def __init__(self, user_id: int, store: ProfileStore, translator: Translator):
+    def __init__(
+        self,
+        user_id: int,
+        store: ProfileStore,
+        translator: Translator,
+        locale: Optional[str] = None,
+    ):
         super().__init__(timeout=None)
         self.user_id = user_id
         self._store = store
         self._t = translator
         self.confirmation_message_id = None
         self.confirmation_channel_id = None
+        self.restart_button.label = translator.t(locale, "view.restart")
 
     @discord.ui.button(
         label="🔄 Restart",
@@ -203,7 +225,10 @@ class SkipStepsView(discord.ui.View):
             colour=discord.Colour.blue(),
         )
         embed.set_footer(text=self._t.t(interaction.locale, "wizard.step1.footer"))
-        await interaction.followup.send(embed=embed)
+        await interaction.followup.send(
+            content=self._t.t(interaction.locale, "verification.start"),
+            embed=embed,
+        )
         if self.confirmation_message_id:
             try:
                 self._store.delete_pending_wizard_view(self.confirmation_message_id)
@@ -213,13 +238,20 @@ class SkipStepsView(discord.ui.View):
 
 
 class SessionExpiredView(discord.ui.View):
-    def __init__(self, user_id: int, store: ProfileStore, translator: Translator):
+    def __init__(
+        self,
+        user_id: int,
+        store: ProfileStore,
+        translator: Translator,
+        locale: Optional[str] = None,
+    ):
         super().__init__(timeout=None)
         self.user_id = user_id
         self._store = store
         self._t = translator
         self.confirmation_message_id = None
         self.confirmation_channel_id = None
+        self.restart_button.label = translator.t(locale, "view.restart_verification")
 
     @discord.ui.button(
         label="🔄 Restart Verification",
@@ -236,8 +268,10 @@ class SessionExpiredView(discord.ui.View):
 
         old_session = self._store.get_wizard_session(self.user_id)
         guild_id = old_session.get("guild_id") if old_session else None
+        config = self._store.get_guild_config(guild_id) if guild_id else None
+        ttl_hours = config.session_ttl_hours if config else DEFAULT_SESSION_TTL_HOURS
 
-        self._store.create_wizard_session(self.user_id, guild_id=guild_id)
+        self._store.create_wizard_session(self.user_id, guild_id=guild_id, ttl_hours=ttl_hours)
         log.info(f"[WIZARD] Created new session for user {self.user_id} after timeout")
 
         await interaction.response.defer()
@@ -251,7 +285,10 @@ class SessionExpiredView(discord.ui.View):
             colour=discord.Colour.blue(),
         )
         embed.set_footer(text=self._t.t(interaction.locale, "wizard.step1.footer_expired"))
-        await interaction.followup.send(embed=embed)
+        await interaction.followup.send(
+            content=self._t.t(interaction.locale, "verification.start"),
+            embed=embed,
+        )
         if self.confirmation_message_id:
             try:
                 self._store.delete_pending_wizard_view(self.confirmation_message_id)
@@ -267,6 +304,7 @@ class ConfirmVerificationView(discord.ui.View):
         store: ProfileStore,
         finalize_callback: Callable,
         translator: Translator,
+        locale: Optional[str] = None,
     ):
         super().__init__(timeout=None)
         self.user_id = user_id
@@ -275,6 +313,8 @@ class ConfirmVerificationView(discord.ui.View):
         self._t = translator
         self.confirmation_message_id = None
         self.confirmation_channel_id = None
+        self.complete_button.label = translator.t(locale, "view.complete")
+        self.restart_button.label = translator.t(locale, "view.restart")
 
     @discord.ui.button(
         label="✅ Complete",
@@ -338,7 +378,10 @@ class ConfirmVerificationView(discord.ui.View):
             colour=discord.Colour.blue(),
         )
         embed.set_footer(text=self._t.t(interaction.locale, "wizard.step1.footer"))
-        await interaction.followup.send(embed=embed)
+        await interaction.followup.send(
+            content=self._t.t(interaction.locale, "verification.start"),
+            embed=embed,
+        )
         if self.confirmation_message_id:
             try:
                 self._store.delete_pending_wizard_view(self.confirmation_message_id)
@@ -359,6 +402,7 @@ class RankConfirmationView(discord.ui.View):
         store: ProfileStore,
         guild_provider: Callable[[], Optional[discord.Guild]],
         translator: Translator,
+        locale: Optional[str] = None,
     ):
         super().__init__(timeout=None)
         self.user_id = user_id
@@ -375,6 +419,8 @@ class RankConfirmationView(discord.ui.View):
         self.log_message = None
         self.confirmation_message_id = None
         self.confirmation_channel_id = None
+        self.accept_button.label = translator.t(locale, "view.accept")
+        self.reject_button.label = translator.t(locale, "view.reject")
 
     @discord.ui.button(
         label="✅ Accept", style=discord.ButtonStyle.green, custom_id="rank_accept"

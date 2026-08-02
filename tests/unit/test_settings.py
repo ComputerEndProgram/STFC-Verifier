@@ -12,7 +12,6 @@ def _clear_env() -> None:
         "SQLITE_PATH",
         "DEBUG",
         "DEFAULT_LANGUAGE",
-        "SESSION_TTL_HOURS",
     ]
     for key in keys:
         os.environ.pop(key, None)
@@ -23,14 +22,12 @@ def test_settings_from_env_loads_global_settings() -> None:
     os.environ["DISCORD_TOKEN"] = "test_global_token"
     os.environ["DEBUG"] = "1"
     os.environ["DEFAULT_LANGUAGE"] = "en"
-    os.environ["SESSION_TTL_HOURS"] = "24"
 
     settings = Settings.from_env()
 
     assert settings.discord_token == "test_global_token"
     assert settings.debug is True
     assert settings.default_language == "en"
-    assert settings.session_ttl_hours == 24
     assert settings.database_path.as_posix().endswith("data/verifier.sqlite3")
 
 
@@ -63,6 +60,7 @@ def test_guild_config_store_crud_and_caching() -> None:
         assert loaded.member_role_id == 300
         assert loaded.stfc_server_number == 106
         assert loaded.manage_alliance_roles is True
+        assert loaded.session_ttl_hours == 168
 
         # Test updates
         updated_config = GuildConfig(

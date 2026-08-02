@@ -8,7 +8,6 @@
   "verification.dm_failed": "❌ Jeg kunne ikke sende dig en DM. Aktivér venligst DM'er fra servermedlemmer, og prøv igen.",
   "verification.server_wrong": "❌ Din karakter skal være på STFC-server {server_id}. Du er i øjeblikket på server {current_server}.",
   "verification.player_id_taken": "❌ Denne STFC-spillerkonto er allerede knyttet til en anden Discord-bruger. Hver spillerkonto kan kun verificeres én gang.",
-  "verification.recall_button": "Klik på knappen nedenfor for at starte verificeringen igen",
   "wizard.welcome.title": "👋 Velkommen til STFC-verificering!",
   "wizard.welcome.description": "For at få adgang til serverfunktioner skal du verificere din STFC-konto.",
   "wizard.welcome.field_what": "Hvad er dette?",

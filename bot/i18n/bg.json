@@ -8,7 +8,6 @@
   "verification.dm_failed": "❌ Не успях да ти изпратя лично съобщение. Моля, разреши лични съобщения от членове на сървъра и опитай отново.",
   "verification.server_wrong": "❌ Твоят герой трябва да е на STFC сървър {server_id}. В момента си на сървър {current_server}.",
   "verification.player_id_taken": "❌ Този STFC акаунт на играч вече е свързан с друг Discord потребител. Всеки акаунт на играч може да бъде верифициран само веднъж.",
-  "verification.recall_button": "Натисни бутона по-долу, за да започнеш верификацията отново",
   "wizard.welcome.title": "👋 Добре дошъл в STFC верификацията!",
   "wizard.welcome.description": "За достъп до функциите на сървъра трябва да верифицираш своя STFC акаунт.",
   "wizard.welcome.field_what": "Какво е това?",

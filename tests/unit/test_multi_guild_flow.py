@@ -3,7 +3,6 @@ from unittest.mock import AsyncMock, MagicMock
 import pytest
 
 from bot.config.guild_config import GuildConfig
-from bot.cogs.admin import AdminCog
 from bot.profiles.veil_security.profile import VeilSecurityProfile
 from bot.core.store import PlayerData
 
@@ -49,38 +48,3 @@ async def test_veil_security_assign_roles() -> None:
     assert any("Server role assigned" in f for f in feedback)
     assert any("OPS 71+ role assigned" in f for f in feedback)
     assert member.add_roles.call_count == 2
-
-
-@pytest.mark.anyio
-async def test_admin_setup_command() -> None:
-    bot = MagicMock()
-    bot.get_guild_config.return_value = None
-    saved_configs = []
-
-    def mock_save(cfg):
-        saved_configs.append(cfg)
-
-    bot.save_guild_config.side_effect = mock_save
-
-    cog = AdminCog(bot)
-
-    interaction = MagicMock()
-    interaction.guild.id = 8888
-    interaction.guild.name = "Test Server"
-    interaction.user.guild_permissions.manage_guild = True
-    interaction.user.guild_permissions.administrator = True
-    interaction.response.send_message = AsyncMock()
-
-    await cog._handle_setup(
-        interaction,
-        profile="stfc_verifier",
-        manage_alliance_roles=True,
-        stfc_server_number=106,
-    )
-
-    assert len(saved_configs) == 1
-    assert saved_configs[0].guild_id == 8888
-    assert saved_configs[0].bot_profile == "stfc_verifier"
-    assert saved_configs[0].manage_alliance_roles is True
-    assert saved_configs[0].stfc_server_number == 106
-    interaction.response.send_message.assert_called_once()

@@ -1,9 +1,7 @@
-import asyncio
 import base64
 import io
 import json
 import logging
-import os
 import pathlib
 import sqlite3
 from datetime import datetime
@@ -40,6 +38,7 @@ class BaseBot(commands.Bot):
         self.settings = settings
         self.store = ProfileStore(str(settings.database_path))
         self._t = Translator(settings.default_language)
+        self._last_update_check: dict[int, datetime] = {}
 
         debug = settings.debug
         logging.basicConfig(
@@ -79,7 +78,7 @@ class BaseBot(commands.Bot):
         self.update_stfc_players.start()
         log.info("[SETUP] Background tasks started")
 
-        self.add_view(ChannelStartView())
+        self.add_view(ChannelStartView(self._t))
         log.info("[SETUP] Registered persistent ChannelStartView")
 
         await self._restore_pending_confirmations()
@@ -288,7 +287,7 @@ class BaseBot(commands.Bot):
                     log.info(f"[WIZARD] Notified user {user_id} of session expiration")
 
     async def _handle_step1(self, message: discord.Message, user_id: int, session: dict):
-        from bot.legacy_profiles.stfc_verifier.stfc_scraper import STFCProScraper
+        from bot.core.stfc_scraper import STFCProScraper
 
         guild_id = session.get("guild_id")
         config = self.get_guild_config(guild_id) if guild_id else None
@@ -368,7 +367,7 @@ class BaseBot(commands.Bot):
         bot_profile_name = config.bot_profile if config else "stfc_verifier"
         profile = get_profile(bot_profile_name)
 
-        embed = profile.build_summary_embed(player_data, config) if config else discord.Embed(
+        embed = profile.build_summary_embed(player_data, config, self._t) if config else discord.Embed(
             title=self._t.t(None, "wizard.summary_title"),
             description=self._t.t(None, "wizard.summary_description"),
             colour=discord.Colour.gold(),
@@ -402,7 +401,7 @@ class BaseBot(commands.Bot):
             return
 
         player_link = session["stfc_link"]
-        from bot.legacy_profiles.stfc_verifier.stfc_scraper import STFCProScraper, format_player_info
+        from bot.core.stfc_scraper import STFCProScraper, format_player_info
 
         player_id = STFCProScraper.extract_player_id_from_url(player_link)
         if not player_id:
@@ -423,7 +422,7 @@ class BaseBot(commands.Bot):
 
         profile = get_profile(config.bot_profile)
 
-        feedback = ["📋 **Verification Complete**\n"]
+        feedback = [self._t.t(interaction.locale, "verification.complete")]
         feedback.append("✅ **stfc.pro Data:**")
         feedback.append(f"  {format_player_info(player_data)}\n")
 
@@ -466,7 +465,7 @@ class BaseBot(commands.Bot):
         await interaction.followup.send(feedback_text, ephemeral=True)
 
         if config.log_channel_id:
-            embed = profile.build_log_embed(member, player_data, session)
+            embed = profile.build_log_embed(member, player_data, session, self._t, interaction.locale)
             screenshot_file = None
             if session.get("screenshot_data"):
                 try:
@@ -565,6 +564,7 @@ class BaseBot(commands.Bot):
                     lambda: _support_ticket_text(config.support_channel_id),
                     self._t,
                     guild_id=member.guild.id,
+                    locale=member.guild.preferred_locale,
                 ),
             )
             self.store.save_pending_wizard_view(msg.id, msg.channel.id, member.id, "StartWizardView")
@@ -591,11 +591,20 @@ class BaseBot(commands.Bot):
         if not configs:
             return
 
-        log.info("[UPDATE] Starting periodic player update check")
         players = self.store.get_all_players()
-        log.info(f"[UPDATE] Found {len(players)} players to check")
+        if not players:
+            log.info("[UPDATE] No players to check")
+            return
+
+        now = datetime.now()
+        log.info("[UPDATE] Starting periodic player update check")
 
         for config in configs:
+            interval_hours = config.update_check_hours or 24
+            last = self._last_update_check.get(config.guild_id)
+            if last and (now - last).total_seconds() < interval_hours * 3600:
+                continue
+
             guild = self.get_guild(config.guild_id)
             if not guild:
                 continue
@@ -607,7 +616,7 @@ class BaseBot(commands.Bot):
                     continue
 
                 try:
-                    from bot.legacy_profiles.stfc_verifier.stfc_scraper import STFCProScraper
+                    from bot.core.stfc_scraper import STFCProScraper
                     player_data = STFCProScraper.fetch_player_data(player_id)
                     if not player_data:
                         log.warning(f"[UPDATE] Could not fetch data for player {player_id}")
@@ -616,6 +625,8 @@ class BaseBot(commands.Bot):
                     await profile.handle_update(self, member, user_id, stfc_link, player_data, config)
                 except Exception as e:
                     log.error(f"[UPDATE] Error updating player {player_id}: {e}")
+
+            self._last_update_check[config.guild_id] = now
 
         log.info("[UPDATE] Periodic player update check completed")
 

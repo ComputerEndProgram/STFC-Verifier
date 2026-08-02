@@ -1,7 +1,7 @@
 [project]
-name = "verifier"
+name = "stfc-verifier"
 version = "0.1.0"
-description = "Discord verifier bot with profile-driven behavior."
+description = "STFC Verifier — Discord verification bot with profile-driven behavior."
 readme = "README.md"
 requires-python = ">=3.11"
 dependencies = [
@@ -13,6 +13,10 @@ dependencies = [
   "numpy",
   "fastapi",
   "uvicorn",
+  "jinja2",
+  "itsdangerous",
+  "httpx",
+  "python-multipart",
 ]
 
 [project.optional-dependencies]
@@ -21,8 +25,7 @@ dev = [
 ]
 
 [project.scripts]
-verifier = "bot.main:main"
-verifier-admin-web = "admin_web.__main__:main"
+stfc-verifier = "bot.main:main"
 
 [tool.setuptools.packages.find]
 include = ["bot*", "admin_web*"]

@@ -8,7 +8,6 @@
   "verification.dm_failed": "❌ Ik kon je geen DM sturen. Schakel DM's van serverleden in en probeer het opnieuw.",
   "verification.server_wrong": "❌ Je personage moet op STFC-server {server_id} staan. Je bevindt je momenteel op server {current_server}.",
   "verification.player_id_taken": "❌ Dit STFC-speleraccount is al gekoppeld aan een andere Discord-gebruiker. Elk speleraccount kan slechts één keer worden geverifieerd.",
-  "verification.recall_button": "Klik op de knop hieronder om de verificatie opnieuw te starten",
   "wizard.welcome.title": "👋 Welkom bij STFC-verificatie!",
   "wizard.welcome.description": "Om toegang te krijgen tot serverfuncties moet je je STFC-account verifiëren.",
   "wizard.welcome.field_what": "Wat is dit?",

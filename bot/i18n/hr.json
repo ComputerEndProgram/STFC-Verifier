@@ -8,7 +8,6 @@
   "verification.dm_failed": "❌ Nisam ti mogao poslati privatnu poruku. Omogući privatne poruke od članova poslužitelja i pokušaj ponovno.",
   "verification.server_wrong": "❌ Tvoj lik mora biti na STFC poslužitelju {server_id}. Trenutno si na poslužitelju {current_server}.",
   "verification.player_id_taken": "❌ Ovaj STFC igrački račun već je povezan s drugim Discord korisnikom. Svaki igrački račun može se verificirati samo jednom.",
-  "verification.recall_button": "Klikni gumb ispod za ponovno pokretanje verifikacije",
   "wizard.welcome.title": "👋 Dobrodošao na STFC verifikaciju!",
   "wizard.welcome.description": "Za pristup značajkama poslužitelja moraš verificirati svoj STFC račun.",
   "wizard.welcome.field_what": "Što je ovo?",

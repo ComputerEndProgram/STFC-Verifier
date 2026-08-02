@@ -1,2 +1,2 @@
-"""Merged verifier bot package."""
+"""STFC Verifier bot package."""
 

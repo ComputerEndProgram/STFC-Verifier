@@ -19,7 +19,7 @@
   <div class="lcars-text-bar lcars-text-bar--a8">Current configuration</div>
   <div class="lcars-section-body">
     {% if config %}
-      {% for group in groups %}
+      {% for group in display_groups %}
         <dl class="lcars-defs">
           {% for f in group.fields %}
             <li>
@@ -49,15 +49,15 @@
   <div class="lcars-text-bar lcars-text-bar--a1">Edit config</div>
   <div class="lcars-section-body">
     <p class="muted tiny">
-      Fields are shared with the <code>/setup</code> slash command. Changes apply to the
-      running bot immediately — no restart required.
+      Changes apply to the running bot immediately — no restart required.
     </p>
     <form class="form" method="post" action="/guilds/{{ guild_id }}/config">
       <input type="hidden" name="csrf_token" value="{{ csrf_token }}" />
       {% for group in groups %}
-        <div style="margin: 0.25rem 0 0.6rem">
+        <div data-group style="margin: 0.25rem 0 0.6rem">
           <h2>{{ group.label }}</h2>
           {% for f in group.fields %}
+            <div class="form-field" data-field="{{ f.name }}" data-profiles="{{ f.profiles|join(' ') }}">
             {% if f.kind == 'select' %}
               <label>
                 {{ f.label }}
@@ -80,6 +80,38 @@
                 <input type="number" name="{{ f.name }}" min="0" value="{{ values[f.name] or '' }}" />
                 {% if f.note %}<span class="lcars-hint">{{ f.note }}</span>{% endif %}
               </label>
+            {% elif f.kind == 'channel' %}
+              <label>
+                {{ f.label }}
+                <input
+                  type="text"
+                  name="{{ f.name }}"
+                  list="channel_options"
+                  inputmode="numeric"
+                  pattern="[0-9]*"
+                  autocomplete="off"
+                  placeholder="search or paste an ID"
+                  value="{{ values[f.name] or '' }}"
+                />
+                {% if f.note %}<span class="lcars-hint">{{ f.note }}</span>{% endif %}
+                {% for c in channels %}{% if values[f.name]|string == c.id %}<span class="lcars-hint">Currently: {{ c.name }}</span>{% endif %}{% endfor %}
+              </label>
+            {% elif f.kind == 'role' %}
+              <label>
+                {{ f.label }}
+                <input
+                  type="text"
+                  name="{{ f.name }}"
+                  list="role_options"
+                  inputmode="numeric"
+                  pattern="[0-9]*"
+                  autocomplete="off"
+                  placeholder="search or paste an ID"
+                  value="{{ values[f.name] or '' }}"
+                />
+                {% if f.note %}<span class="lcars-hint">{{ f.note }}</span>{% endif %}
+                {% for r in roles %}{% if values[f.name]|string == r.id %}<span class="lcars-hint">Currently: {{ r.name }}</span>{% endif %}{% endfor %}
+              </label>
             {% else %}
               <label>
                 {{ f.label }}
@@ -94,12 +126,41 @@
                 {% if f.note %}<span class="lcars-hint">{{ f.note }}</span>{% endif %}
               </label>
             {% endif %}
+            </div>
           {% endfor %}
         </div>
       {% endfor %}
+      <datalist id="channel_options">
+        {% for c in channels %}<option value="{{ c.id }}">{{ c.name }}</option>{% endfor %}
+      </datalist>
+      <datalist id="role_options">
+        {% for r in roles %}<option value="{{ r.id }}">{{ r.name }}</option>{% endfor %}
+      </datalist>
       <button type="submit" class="lcars-pill">Save config</button>
     </form>
   </div>
 </section>
+
+<script>
+(function () {
+  const select = document.querySelector('select[name="bot_profile"]');
+  if (!select) return;
+  const groups = document.querySelectorAll('[data-group]');
+  function apply() {
+    const profile = select.value;
+    groups.forEach(function (group) {
+      let visible = 0;
+      group.querySelectorAll('[data-field]').forEach(function (field) {
+        const ok = field.dataset.profiles.split(/\s+/).indexOf(profile) !== -1;
+        field.style.display = ok ? '' : 'none';
+        if (ok) visible++;
+      });
+      group.style.display = visible ? '' : 'none';
+    });
+  }
+  select.addEventListener('change', apply);
+  apply();
+})();
+</script>
 
 {% endblock %}

@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import asyncio
 from urllib.parse import urlencode
 
 import httpx
@@ -12,6 +13,38 @@ CDN_BASE = "https://cdn.discordapp.com"
 ADMINISTRATOR = 1 << 3
 MANAGE_GUILD = 1 << 5
 
+TRANSIENT_STATUSES = {429, 500, 502, 503, 504}
+
+
+async def _get_with_retry(
+    client: httpx.AsyncClient,
+    url: str,
+    headers: dict[str, str],
+    *,
+    label: str,
+    max_retries: int = 2,
+) -> httpx.Response:
+    """Idempotent GET with a few retries on transient Discord failures.
+
+    Network errors and rate-limit/5xx responses are retried with a short
+    backoff; everything else is returned for the caller to handle.
+    """
+    for attempt in range(max_retries + 1):
+        try:
+            resp = await client.get(url, headers=headers)
+        except httpx.TransportError as exc:
+            if attempt == max_retries:
+                raise DiscordAPIError(f"Discord GET {label} failed (network error)") from exc
+            await asyncio.sleep(0.5 * (attempt + 1))
+            continue
+        if resp.status_code in TRANSIENT_STATUSES and attempt < max_retries:
+            retry_after = resp.headers.get("retry-after")
+            delay = float(retry_after) if retry_after else 0.5 * (attempt + 1)
+            await asyncio.sleep(delay)
+            continue
+        return resp
+    raise AssertionError("unreachable")
+
 
 def has_manage_guild(permissions: int, owner: bool = False) -> bool:
     return owner or bool(permissions & (ADMINISTRATOR | MANAGE_GUILD))
@@ -22,13 +55,6 @@ def guild_icon_url(guild: dict) -> str | None:
     if not icon:
         return None
     return f"{CDN_BASE}/icons/{guild['id']}/{icon}.png?size=128"
-
-
-def user_avatar_url(user: dict) -> str | None:
-    avatar = user.get("avatar")
-    if not avatar:
-        return None
-    return f"{CDN_BASE}/avatars/{user['id']}/{avatar}.png?size=128"
 
 
 class DiscordAPIError(RuntimeError):
@@ -57,7 +83,7 @@ class DiscordAPI:
         self._client: httpx.AsyncClient | None = None
 
     async def _http(self) -> httpx.AsyncClient:
-        if self._client is None:
+        if self._client is None or self._client.is_closed:
             self._client = httpx.AsyncClient(timeout=httpx.Timeout(15.0))
         return self._client
 
@@ -80,8 +106,8 @@ class DiscordAPI:
 
     async def _token_request(self, data: dict) -> dict:
         headers = {"Content-Type": "application/x-www-form-urlencoded"}
-        async with await self._http() as client:
-            resp = await client.post(OAUTH_TOKEN_URL, data=data, headers=headers)
+        client = await self._http()
+        resp = await client.post(OAUTH_TOKEN_URL, data=data, headers=headers)
         if resp.status_code != 200:
             raise DiscordAPIError(
                 f"Discord token exchange failed (HTTP {resp.status_code})", resp.status_code
@@ -117,8 +143,7 @@ class DiscordAPI:
 
     async def _bearer_get(self, path: str, access_token: str) -> dict | list[dict]:
         headers = {"Authorization": f"Bearer {access_token}"}
-        async with await self._http() as client:
-            resp = await client.get(f"{API_BASE}{path}", headers=headers)
+        resp = await _get_with_retry(await self._http(), f"{API_BASE}{path}", headers, label=path)
         if resp.status_code == 401:
             raise DiscordAPIError("Discord access token rejected (HTTP 401)", 401)
         if resp.status_code != 200:
@@ -133,10 +158,39 @@ class DiscordAPI:
         Fetched fresh on every call so permission checks can't go stale.
         """
         headers = {"Authorization": f"Bot {self.bot_token}"}
-        async with await self._http() as client:
-            resp = await client.get(f"{API_BASE}/users/@me/guilds", headers=headers)
+        resp = await _get_with_retry(
+            await self._http(), f"{API_BASE}/users/@me/guilds", headers, label="bot guilds"
+        )
         if resp.status_code != 200:
             raise DiscordAPIError(
                 f"Discord bot guild lookup failed (HTTP {resp.status_code})", resp.status_code
             )
         return {int(g["id"]) for g in resp.json()}
+
+    async def get_guild_channels(self, guild_id: int) -> list[dict]:
+        headers = {"Authorization": f"Bot {self.bot_token}"}
+        resp = await _get_with_retry(
+            await self._http(),
+            f"{API_BASE}/guilds/{guild_id}/channels",
+            headers,
+            label=f"guild {guild_id} channels",
+        )
+        if resp.status_code != 200:
+            raise DiscordAPIError(
+                f"Discord channel lookup failed (HTTP {resp.status_code})", resp.status_code
+            )
+        return resp.json()
+
+    async def get_guild_roles(self, guild_id: int) -> list[dict]:
+        headers = {"Authorization": f"Bot {self.bot_token}"}
+        resp = await _get_with_retry(
+            await self._http(),
+            f"{API_BASE}/guilds/{guild_id}/roles",
+            headers,
+            label=f"guild {guild_id} roles",
+        )
+        if resp.status_code != 200:
+            raise DiscordAPIError(
+                f"Discord role lookup failed (HTTP {resp.status_code})", resp.status_code
+            )
+        return resp.json()

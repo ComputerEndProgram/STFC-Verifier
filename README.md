@@ -1,4 +1,4 @@
-# DTB Verifier
+# STFC Verifier
 
 A multi-profile Discord bot for verifying STFC (Star Trek Fleet Command) accounts via [stfc.pro](https://stfc.pro) / [stfc.wtf](https://stfc.wtf) player data.
 
@@ -15,18 +15,20 @@ One codebase, one bot process, many servers. Each server's verification profile 
 ## Quick Start
 
 ```bash
-# Install (editable mode with dev dependencies)
-python3 -m pip install -e ".[dev]"
+# Set up a virtualenv and install (editable mode with dev dependencies)
+python3 -m venv .venv
+.venv/bin/pip install -e ".[dev]"
 
 # Configure
 cp .env.example .env
 # Edit .env — see below for required variables
 
 # Run
-python3 -m bot.main
-# Or, if installed via pip install .
-verifier
-```
+.venv/bin/stfc-verifier
+
+Note: on this machine `/usr/bin/python3.13` is a custom build without `ensurepip`,
+so create the venv with `--without-pip` and bootstrap pip via `get-pip.py`
+(https://bootstrap.pypa.io/get-pip.py) if `python3 -m venv .venv` fails.
 
 ## Environment Variables
 
@@ -37,7 +39,6 @@ See [`.env.example`](.env.example) for the full annotated template.
 | `DISCORD_TOKEN` | — | Bot token from the [Discord Developer Portal](https://discord.com/developers/applications) |
 | `DEBUG` | `0` | Enable verbose debug logging |
 | `DEFAULT_LANGUAGE` | `en` | Fallback language for the verification wizard UI |
-| `SESSION_TTL_HOURS` | `168` | Hours a verification wizard session stays alive |
 
 Per-server settings (profile, channels, roles, criteria) are **not** env vars anymore — they live in the `guild_configs` table of the database and are managed through the admin web UI.
 
@@ -52,27 +53,23 @@ By default, the bot creates a single SQLite database at `data/verifier.sqlite3`,
 
 ## Admin Web UI
 
-An optional separate process lets server admins view and edit each guild's configuration over Discord OAuth2 login. It uses the same database as the bot, and saved changes are picked up by the running bot without a restart.
+The admin web UI is the **only** way to configure a guild's settings. It runs embedded in the bot process (no separate command needed) and lets server admins view and edit each guild's configuration over Discord OAuth2 login. It uses the same database as the bot, and saved changes are picked up by the running bot without a restart.
 
 ### Required env vars
 
 `DISCORD_CLIENT_ID`, `DISCORD_CLIENT_SECRET`, and `ADMIN_WEB_SESSION_SECRET` (see `.env.example`). In the Discord Developer Portal, register the redirect URL `{ADMIN_WEB_BASE_URL}/auth/callback`.
 
-### Run
+### URL
 
-```bash
-python3 -m admin_web
-# Or, if installed via pip install .
-verifier-admin-web
-```
+`{ADMIN_WEB_BASE_URL}` (default `http://127.0.0.1:8787`).
 
 ### What you can configure per server
 
 - **Profile** — `stfc_verifier` / `stfc_verifier_alliance` / `veil_security`
 - **Channels** — verify, log, support (IDs)
-- **Roles** — verified, unverified, member, commodore, admiral, admin, ops71+ (IDs)
-- **Criteria** — minimum OPS level, STFC server number, update check hours
-- **Switches** — require screenshot, manage alliance roles
+- **Roles** — verified, member, commodore, admiral, admin, ops71+ (IDs)
+- **Criteria** — minimum OPS level, STFC server number
+- **Behavior** — update check hours, wizard session TTL hours, require screenshot, manage alliance roles
 
 ### Access control
 
@@ -128,7 +125,8 @@ python3 -m pytest -q
 ```
 bot/
 ├── main.py                    # Entry point
-├── launcher.py                # Builds and runs the merged app
+├── launcher.py                # Builds and runs the app (bot + embedded admin web)
+├── app.py                     # Application wiring; starts admin web in a thread
 ├── config/
 │   ├── settings.py            # Settings from .env
 │   ├── guild_config.py        # Per-guild config dataclass (stored in DB)
@@ -136,11 +134,9 @@ bot/
 ├── core/
 │   ├── bot_base.py            # BaseBot — shared verification logic
 │   ├── store.py               # SQLite store (ProfileStore) with config cache
+│   ├── stfc_scraper.py        # STFC.pro/stfc.wtf player data scraper
 │   ├── views.py               # Discord UI views (wizards, confirmations)
 │   ├── verification/          # Session flow and step constants
-│   ├── sessions/              # Session store
-│   ├── roles/                 # Role assignment
-│   ├── persistence/           # Database helpers
 │   └── i18n/                  # Translation system
 ├── cogs/
 │   ├── verification.py        # /verify command
@@ -149,10 +145,9 @@ bot/
 │   ├── stfc_verifier/
 │   ├── stfc_verifier_alliance/
 │   └── veil_security/
-├── legacy_profiles/           # Shared STFC scraper (stfc_verifier/stfc_scraper.py)
 └── i18n/                      # Translation JSON files (22 languages)
 
-admin_web/                     # Admin web UI (separate process)
+admin_web/                     # Admin web UI (served from within the bot process)
 ├── app.py                     # FastAPI app + routes
 ├── auth.py                    # Discord OAuth2 + per-request permission checks
 ├── forms.py                   # GuildConfig-derived edit form

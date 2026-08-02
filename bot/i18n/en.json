@@ -8,7 +8,6 @@
   "verification.dm_failed": "❌ I couldn't send you a DM. Please enable DMs from server members and try again.",
   "verification.server_wrong": "❌ Your character must be on STFC Server {server_id}. You are currently on Server {current_server}.",
   "verification.player_id_taken": "❌ This STFC player account is already linked to another Discord user. Each player account can only be verified once.",
-  "verification.recall_button": "Click the button below to start verification again",
   "wizard.welcome.title": "👋 Welcome to STFC Verification!",
   "wizard.welcome.description": "To access server features, you need to verify your STFC account.",
   "wizard.welcome.field_what": "What is this?",

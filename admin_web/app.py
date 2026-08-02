@@ -51,7 +51,7 @@ async def lifespan(app: FastAPI):
     await discord.aclose()
 
 
-app = FastAPI(title="Merged Verifier Admin", lifespan=lifespan)
+app = FastAPI(title="STFC Verifier Admin", lifespan=lifespan)
 app.mount("/static", StaticFiles(directory=str(BASE_DIR / "static")), name="static")
 
 
@@ -67,6 +67,32 @@ def _profile_label(name: str | None) -> str | None:
     if not name:
         return None
     return PROFILE_NAMES.get(name, name)
+
+
+TEXT_CHANNEL_TYPES = (0, 5)  # GUILD_TEXT, GUILD_ANNOUNCEMENT
+
+
+async def _guild_lookup_options(ctx: AdminContext, guild_id: int) -> tuple[list[dict], list[dict]]:
+    """Channels/roles of a guild the bot is in, for the form's search fields.
+
+    Falls back to empty lists on failure so the page still renders.
+    """
+    try:
+        channels = await ctx.discord.get_guild_channels(guild_id)
+        roles = await ctx.discord.get_guild_roles(guild_id)
+    except DiscordAPIError:
+        return [], []
+    channel_options = [
+        {"id": c["id"], "name": f"#{c['name']}"}
+        for c in channels
+        if c.get("type") in TEXT_CHANNEL_TYPES
+    ]
+    role_options = [
+        {"id": r["id"], "name": f"@{r['name']}"}
+        for r in roles
+        if r["id"] != str(guild_id)  # skip @everyone
+    ]
+    return channel_options, role_options
 
 
 def _render(
@@ -130,7 +156,7 @@ async def on_access_denied(request: Request, exc: AccessDenied):
 @app.get("/", response_class=HTMLResponse)
 async def landing(request: Request):
     return _templates(request).TemplateResponse(
-        request, "landing.html", {"title": "Merged Verifier"}
+        request, "landing.html", {"title": "STFC Verifier"}
     )
 
 
@@ -165,11 +191,11 @@ async def auth_login(request: Request):
     ctx = _ctx(request)
     if ctx.read_cookie(request) is not None:
         return RedirectResponse("/app", status_code=303)
-    state = ctx.make_state()
+    state, token = ctx.make_state()
     response = RedirectResponse(ctx.discord.authorize_url(state), status_code=303)
     response.set_cookie(
         STATE_COOKIE,
-        state,
+        token,
         max_age=STATE_TTL_SECONDS,
         httponly=True,
         secure=ctx.cfg.cookie_secure,
@@ -280,6 +306,7 @@ async def guild_page(request: Request, guild_id: int, saved: int = 0):
     session = ctx.require_login(request)
     guild = await ctx.require_guild(request, guild_id)
     config = ctx.store.get_guild_config(guild_id)
+    channels, roles = await _guild_lookup_options(ctx, guild_id)
 
     nav_top, nav_bottom = _user_nav(session)
     status = "configured" if config else "unconfigured"
@@ -303,6 +330,9 @@ async def guild_page(request: Request, guild_id: int, saved: int = 0):
         config=config,
         values=config_to_values(config),
         groups=build_form_spec(),
+        display_groups=build_form_spec(config.bot_profile if config else None),
+        channels=channels,
+        roles=roles,
         csrf_token=session.csrf_token,
         saved=bool(saved),
         profile_label=_profile_label(config.bot_profile) if config else None,
@@ -324,6 +354,7 @@ async def guild_config_save(request: Request, guild_id: int):
         config = values_to_config(guild_id, form)
     except ConfigParseError as exc:
         config = ctx.store.get_guild_config(guild_id)
+        channels, roles = await _guild_lookup_options(ctx, guild_id)
         nav_top, nav_bottom = _user_nav(session)
         nav_bottom.insert(
             0, {"label": "Error", "color": "alert"}
@@ -341,6 +372,9 @@ async def guild_config_save(request: Request, guild_id: int):
             config=config,
             values=form_to_values(form),
             groups=build_form_spec(),
+            display_groups=build_form_spec(config.bot_profile if config else None),
+            channels=channels,
+            roles=roles,
             csrf_token=session.csrf_token,
             saved=False,
             form_error=str(exc),

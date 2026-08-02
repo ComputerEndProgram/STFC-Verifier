@@ -19,13 +19,3 @@ def optional_first(*names: str) -> str | None:
         if value is not None:
             return value
     return None
-
-
-def optional_int(name: str) -> int | None:
-    value = optional(name)
-    return int(value) if value is not None else None
-
-
-def optional_int_first(*names: str) -> int | None:
-    value = optional_first(*names)
-    return int(value) if value is not None else None

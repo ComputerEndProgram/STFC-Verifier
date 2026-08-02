@@ -65,7 +65,6 @@ class ProfileStore:
                     log_channel_id INTEGER,
                     support_channel_id INTEGER,
                     verified_role_id INTEGER,
-                    unverified_role_id INTEGER,
                     member_role_id INTEGER,
                     commodore_role_id INTEGER,
                     admiral_role_id INTEGER,
@@ -74,6 +73,7 @@ class ProfileStore:
                     minimum_ops_level INTEGER,
                     stfc_server_number INTEGER,
                     update_check_hours INTEGER DEFAULT 24,
+                    session_ttl_hours INTEGER DEFAULT 168,
                     require_screenshot INTEGER DEFAULT 1,
                     manage_alliance_roles INTEGER DEFAULT 0
                 )
@@ -127,6 +127,11 @@ class ProfileStore:
                                  if col in ("verification_status", "verified_at", "rank")
                                  else f"ALTER TABLE stfc_players ADD COLUMN {col} INTEGER")
 
+            cursor = conn.execute("PRAGMA table_info(guild_configs)")
+            guild_columns = {row[1] for row in cursor.fetchall()}
+            if "session_ttl_hours" not in guild_columns:
+                conn.execute("ALTER TABLE guild_configs ADD COLUMN session_ttl_hours INTEGER DEFAULT 168")
+
             cursor = conn.execute("PRAGMA table_info(wizard_sessions)")
             wizard_columns = {row[1] for row in cursor.fetchall()}
             if "player_data_json" not in wizard_columns:
@@ -163,9 +168,10 @@ class ProfileStore:
         with sqlite3.connect(self.path) as conn:
             cursor = conn.execute(
                 """SELECT guild_id, bot_profile, verify_channel_id, log_channel_id, support_channel_id,
-                          verified_role_id, unverified_role_id, member_role_id, commodore_role_id,
+                          verified_role_id, member_role_id, commodore_role_id,
                           admiral_role_id, admin_role_id, ops71_plus_role_id, minimum_ops_level,
-                          stfc_server_number, update_check_hours, require_screenshot, manage_alliance_roles
+                          stfc_server_number, update_check_hours, session_ttl_hours,
+                          require_screenshot, manage_alliance_roles
                    FROM guild_configs WHERE guild_id = ?""",
                 (guild_id,),
             )
@@ -179,15 +185,15 @@ class ProfileStore:
                 log_channel_id=row[3],
                 support_channel_id=row[4],
                 verified_role_id=row[5],
-                unverified_role_id=row[6],
-                member_role_id=row[7],
-                commodore_role_id=row[8],
-                admiral_role_id=row[9],
-                admin_role_id=row[10],
-                ops71_plus_role_id=row[11],
-                minimum_ops_level=row[12],
-                stfc_server_number=row[13],
-                update_check_hours=row[14] if row[14] is not None else 24,
+                member_role_id=row[6],
+                commodore_role_id=row[7],
+                admiral_role_id=row[8],
+                admin_role_id=row[9],
+                ops71_plus_role_id=row[10],
+                minimum_ops_level=row[11],
+                stfc_server_number=row[12],
+                update_check_hours=row[13] if row[13] is not None else 24,
+                session_ttl_hours=row[14] if row[14] is not None else 168,
                 require_screenshot=bool(row[15]) if row[15] is not None else True,
                 manage_alliance_roles=bool(row[16]) if row[16] is not None else False,
             )
@@ -199,9 +205,10 @@ class ProfileStore:
             conn.execute(
                 """INSERT OR REPLACE INTO guild_configs
                    (guild_id, bot_profile, verify_channel_id, log_channel_id, support_channel_id,
-                    verified_role_id, unverified_role_id, member_role_id, commodore_role_id,
+                    verified_role_id, member_role_id, commodore_role_id,
                     admiral_role_id, admin_role_id, ops71_plus_role_id, minimum_ops_level,
-                    stfc_server_number, update_check_hours, require_screenshot, manage_alliance_roles)
+                    stfc_server_number, update_check_hours, session_ttl_hours,
+                    require_screenshot, manage_alliance_roles)
                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
                 (
                     config.guild_id,
@@ -210,7 +217,6 @@ class ProfileStore:
                     config.log_channel_id,
                     config.support_channel_id,
                     config.verified_role_id,
-                    config.unverified_role_id,
                     config.member_role_id,
                     config.commodore_role_id,
                     config.admiral_role_id,
@@ -219,6 +225,7 @@ class ProfileStore:
                     config.minimum_ops_level,
                     config.stfc_server_number,
                     config.update_check_hours,
+                    config.session_ttl_hours,
                     1 if config.require_screenshot else 0,
                     1 if config.manage_alliance_roles else 0,
                 ),
@@ -239,9 +246,10 @@ class ProfileStore:
         with sqlite3.connect(self.path) as conn:
             cursor = conn.execute(
                 """SELECT guild_id, bot_profile, verify_channel_id, log_channel_id, support_channel_id,
-                          verified_role_id, unverified_role_id, member_role_id, commodore_role_id,
+                          verified_role_id, member_role_id, commodore_role_id,
                           admiral_role_id, admin_role_id, ops71_plus_role_id, minimum_ops_level,
-                          stfc_server_number, update_check_hours, require_screenshot, manage_alliance_roles
+                          stfc_server_number, update_check_hours, session_ttl_hours,
+                          require_screenshot, manage_alliance_roles
                    FROM guild_configs"""
             )
             configs = []
@@ -253,15 +261,15 @@ class ProfileStore:
                     log_channel_id=row[3],
                     support_channel_id=row[4],
                     verified_role_id=row[5],
-                    unverified_role_id=row[6],
-                    member_role_id=row[7],
-                    commodore_role_id=row[8],
-                    admiral_role_id=row[9],
-                    admin_role_id=row[10],
-                    ops71_plus_role_id=row[11],
-                    minimum_ops_level=row[12],
-                    stfc_server_number=row[13],
-                    update_check_hours=row[14] if row[14] is not None else 24,
+                    member_role_id=row[6],
+                    commodore_role_id=row[7],
+                    admiral_role_id=row[8],
+                    admin_role_id=row[9],
+                    ops71_plus_role_id=row[10],
+                    minimum_ops_level=row[11],
+                    stfc_server_number=row[12],
+                    update_check_hours=row[13] if row[13] is not None else 24,
+                    session_ttl_hours=row[14] if row[14] is not None else 168,
                     require_screenshot=bool(row[15]) if row[15] is not None else True,
                     manage_alliance_roles=bool(row[16]) if row[16] is not None else False,
                 )
@@ -428,23 +436,6 @@ class ProfileStore:
             )
             return cursor.fetchone()
 
-    def get_verification_status(self, user_id: int) -> Optional[str]:
-        with sqlite3.connect(self.path) as conn:
-            cursor = conn.execute(
-                "SELECT verification_status FROM stfc_players WHERE user_id = ?",
-                (user_id,),
-            )
-            row = cursor.fetchone()
-            return row[0] if row else None
-
-    def is_user_verified(self, user_id: int) -> bool:
-        with sqlite3.connect(self.path) as conn:
-            cursor = conn.execute(
-                "SELECT user_id FROM stfc_players WHERE user_id = ? AND verification_status = 'verified'",
-                (user_id,),
-            )
-            return cursor.fetchone() is not None
-
     def mark_verified(self, user_id: int):
         with sqlite3.connect(self.path) as conn:
             conn.execute(
@@ -467,8 +458,9 @@ class ProfileStore:
             )
             conn.commit()
 
-    def create_wizard_session(self, user_id: int, guild_id: Optional[int] = None):
-        expires_at = (datetime.now() + timedelta(minutes=10)).isoformat()
+    def create_wizard_session(self, user_id: int, guild_id: Optional[int] = None,
+                              ttl_hours: int = 168):
+        expires_at = (datetime.now() + timedelta(hours=ttl_hours)).isoformat()
         with sqlite3.connect(self.path) as conn:
             conn.execute(
                 """INSERT OR REPLACE INTO wizard_sessions (user_id, guild_id, step, created_at, expires_at)
@@ -566,11 +558,3 @@ class ProfileStore:
                 "SELECT username, level, server, alliance_tag, rank, alliance_role_id FROM stfc_players WHERE user_id = ?",
                 (user_id,),
             ).fetchone()
-
-    def get_user_stfc_link(self, user_id: int) -> Optional[str]:
-        with sqlite3.connect(self.path) as conn:
-            row = conn.execute(
-                "SELECT stfc_link FROM stfc_players WHERE user_id = ?",
-                (user_id,),
-            ).fetchone()
-            return row[0] if row else None

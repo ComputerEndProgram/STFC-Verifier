@@ -10,7 +10,6 @@ class GuildConfig:
     log_channel_id: Optional[int] = None
     support_channel_id: Optional[int] = None
     verified_role_id: Optional[int] = None
-    unverified_role_id: Optional[int] = None
     member_role_id: Optional[int] = None
     commodore_role_id: Optional[int] = None
     admiral_role_id: Optional[int] = None
@@ -19,5 +18,6 @@ class GuildConfig:
     minimum_ops_level: Optional[int] = None
     stfc_server_number: Optional[int] = None
     update_check_hours: int = 24
+    session_ttl_hours: int = 168
     require_screenshot: bool = True
     manage_alliance_roles: bool = False

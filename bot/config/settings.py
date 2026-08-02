@@ -9,7 +9,6 @@ class Settings:
     discord_token: str
     debug: bool = False
     default_language: str = "en"
-    session_ttl_hours: int = 168
     database_url: str | None = None
     sqlite_path: str | None = None
 
@@ -28,7 +27,6 @@ class Settings:
             discord_token=env.required("DISCORD_TOKEN"),
             debug=bool(int(env.optional("DEBUG") or "0")),
             default_language=env.optional("DEFAULT_LANGUAGE") or "en",
-            session_ttl_hours=int(env.optional("SESSION_TTL_HOURS") or "168"),
             database_url=env.optional("DATABASE_URL"),
             sqlite_path=env.optional("SQLITE_PATH"),
         )

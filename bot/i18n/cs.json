@@ -8,7 +8,6 @@
   "verification.dm_failed": "❌ Nepodařilo se mi odeslat ti soukromou zprávu. Povol prosím soukromé zprávy od členů serveru a zkus to znovu.",
   "verification.server_wrong": "❌ Tvá postava musí být na STFC serveru {server_id}. Momentálně jsi na serveru {current_server}.",
   "verification.player_id_taken": "❌ Tento STFC herní účet je již propojen s jiným uživatelem Discordu. Každý herní účet lze ověřit pouze jednou.",
-  "verification.recall_button": "Klikni na tlačítko níže pro opětovné zahájení verifikace",
   "wizard.welcome.title": "👋 Vítej ve verifikaci STFC!",
   "wizard.welcome.description": "Pro přístup k funkcím serveru musíš ověřit svůj STFC účet.",
   "wizard.welcome.field_what": "Co to je?",

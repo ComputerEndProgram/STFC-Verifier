@@ -8,7 +8,6 @@
   "verification.dm_failed": "❌ En voinut lähettää sinulle yksityisviestiä. Ota yksityisviestit palvelimen jäseniltä käyttöön ja yritä uudelleen.",
   "verification.server_wrong": "❌ Hahmosi täytyy olla STFC-palvelimella {server_id}. Olet tällä hetkellä palvelimella {current_server}.",
   "verification.player_id_taken": "❌ Tämä STFC-pelitili on jo yhdistetty toiseen Discord-käyttäjään. Jokainen pelitili voidaan vahvistaa vain kerran.",
-  "verification.recall_button": "Napsauta alla olevaa painiketta aloittaaksesi vahvistuksen uudelleen",
   "wizard.welcome.title": "👋 Tervetuloa STFC-vahvistukseen!",
   "wizard.welcome.description": "Palvelimen ominaisuuksien käyttämiseksi sinun täytyy vahvistaa STFC-tilisi.",
   "wizard.welcome.field_what": "Mikä tämä on?",

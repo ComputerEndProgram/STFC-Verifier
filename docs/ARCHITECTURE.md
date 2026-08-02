@@ -4,12 +4,10 @@
 
 - `bot/core/`: shared runtime logic
 - `bot/profiles/`: profile-specific verification criteria and behavior
-- `bot/i18n/`: language JSON files (`en`, `de`, `fr`)
+- `bot/i18n/`: language JSON files (22 languages)
 - `bot/config/`: env + settings + profile registry + `GuildConfig`
-- `admin_web/`: Discord-OAuth-protected admin UI (separate process)
-- `migrations/`: shared and profile-specific SQL migrations
-- `scripts/`: legacy import entrypoints from old repos
-- `tests/`: unit/integration/migration tests
+- `admin_web/`: Discord-OAuth-protected admin UI (served embedded in the bot process)
+- `tests/`: unit tests
 
 ## Per-guild configuration
 
@@ -37,11 +35,13 @@ the admin web UI. Messages build channel mentions dynamically:
 
 ## Admin web UI
 
-`admin_web/` is a FastAPI app run as a separate process sharing the same
-database. It exposes the `GuildConfig` fields as an edit form (derived via
-`dataclasses.fields()`). Access is granted per request: the user must hold
-Manage Server (or Administrator) in the guild, and both the user and the bot
-must be members of that guild. Sessions are server-side in the database.
+`admin_web/` is a FastAPI app served in a background thread within the same bot
+process (see `bot/app.py`), sharing the same database. It is the only way to
+configure a guild — there are no setup slash commands. It exposes the
+`GuildConfig` fields as an edit form (derived via `dataclasses.fields()`).
+Access is granted per request: the user must hold Manage Server (or
+Administrator) in the guild, and both the user and the bot must be members of
+that guild. Sessions are server-side in the database.
 
 ## i18n behavior
 
@@ -51,12 +51,15 @@ must be members of that guild. Sessions are server-side in the database.
 
 ## Session persistence and restart restore
 
-`wizard_sessions` stores `language`, `current_step`, `answers_json`, and TTL.
-`persistent_views` stores message/channel/custom ID state for startup restoration.
+`wizard_sessions` stores `guild_id`, `step`, `stfc_link`, `screenshot_data`,
+`player_data_json`, `created_at`, and `expires_at`. The TTL is controlled by the
+per-guild `session_ttl_hours` config (default 168). `pending_wizard_views` and
+`pending_rank_confirmations` store message/channel/custom ID state so persistent
+buttons survive a bot restart.
 
 ## Data separation
 
 One shared SQLite database (`data/verifier.sqlite3` by default) holds guild
-configs, verification records, sessions, and persistent views. Guilds are
+configs, verification records, wizard sessions, and persistent views. Guilds are
 isolated by `guild_id` rows rather than by separate databases. Override the
 location with `SQLITE_PATH` or `DATABASE_URL`.
