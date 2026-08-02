@@ -1,16 +1,16 @@
 # STFC Verifier
 
-A multi-profile Discord bot for verifying STFC (Star Trek Fleet Command) accounts via [stfc.pro](https://stfc.pro) / [stfc.wtf](https://stfc.wtf) player data.
+A multi-profile Discord bot for verifying STFC (Star Trek Fleet Command) accounts via [sSTFC.pro](https://stfc.pro) player data.
 
-One codebase, one bot process, many servers. Each server's verification profile (`stfc_verifier`, `stfc_verifier_alliance`, or `veil_security`) and its channel/role settings are stored per-guild in a shared SQLite database and edited through the built-in admin web UI.
+One codebase, one bot process, many servers. Each server's verification profile and its channel/role settings are stored per-guild in a shared SQLite database and edited through the built-in admin web UI.
 
 ## Profiles
 
 | Profile | Description |
 |---|---|
-| `stfc_verifier` | Rank-based verification with automatic alliance role management |
-| `stfc_verifier_alliance` | Rank-based verification (alliance variant, no auto-created alliance roles) |
-| `veil_security` | OPS level-based verification with server and OPS 71+ role gates |
+| `Verifier for Server Guilds` | Rank-based verification with automatic alliance role management |
+| `Verifier for Alliance Guids` | Rank-based verification (alliance variant, no auto-created alliance roles) |
+| `OPS Level Verifier` | OPS level-based verification with server and OPS Level role gates |
 
 ## Quick Start
 
