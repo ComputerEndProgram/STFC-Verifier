@@ -1,4 +1,4 @@
-# Merged architecture
+# Architecture
 
 ## Core modules
 
