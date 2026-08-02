@@ -8,4 +8,3 @@ def test_normalize_locale_reduces_region_to_language() -> None:
 
 def test_normalize_locale_aliases_nb_to_no() -> None:
     assert normalize_locale("nb") == "no"
-

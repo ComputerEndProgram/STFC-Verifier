@@ -1,15 +1,14 @@
 import logging
-from typing import Optional
 
 import discord
 from discord import app_commands
 from discord.ext import commands
 
+from bot.config.profiles import get_profile
 from bot.core.i18n.translator import Translator
+from bot.core.stfc_scraper import STFCProScraper, format_player_info
 from bot.core.store import _support_ticket_text
 from bot.core.views import ChannelStartView, StartWizardView
-from bot.config.profiles import get_profile
-from bot.core.stfc_scraper import STFCProScraper, format_player_info
 
 log = logging.getLogger("veil_bot")
 
@@ -22,7 +21,7 @@ _RANK_TIERS = {
 }
 
 
-def _get_rank_tier(rank: Optional[str]) -> Optional[str]:
+def _get_rank_tier(rank: str | None) -> str | None:
     if not rank:
         return None
     return _RANK_TIERS.get(rank.lower())
@@ -79,7 +78,9 @@ class AdminCog(commands.Cog):
             if config.admin_role_id
             else None
         )
-        is_admin_user = (admin_role and admin_role in interaction.user.roles) or interaction.user.guild_permissions.administrator
+        is_admin_user = (
+            admin_role and admin_role in interaction.user.roles
+        ) or interaction.user.guild_permissions.administrator
         if not is_admin_user:
             return await interaction.response.send_message(
                 "❌ You do not have permission to use this command.",
@@ -147,7 +148,9 @@ class AdminCog(commands.Cog):
 
             if roles_to_remove:
                 await member.remove_roles(*roles_to_remove, reason=f"[RECALL] {reason}")
-                log.info(f"[RECALL] Removed {len(roles_to_remove)} roles from {member.id}")
+                log.info(
+                    f"[RECALL] Removed {len(roles_to_remove)} roles from {member.id}"
+                )
         except Exception as e:
             log.warning(f"[RECALL] Error removing roles from {member.id}: {e}")
 
@@ -178,7 +181,9 @@ class AdminCog(commands.Cog):
                     locale=locale,
                 ),
             )
-            store.save_pending_wizard_view(msg.id, msg.channel.id, member.id, "StartWizardView")
+            store.save_pending_wizard_view(
+                msg.id, msg.channel.id, member.id, "StartWizardView"
+            )
             log.info(f"[RECALL] Sent recall notification to {member.id}")
         except discord.Forbidden:
             log.warning(f"[RECALL] Could not send DM to {member.id} (DMs disabled)")
@@ -202,7 +207,11 @@ class AdminCog(commands.Cog):
                 embed.add_field(name="Player", value=f"{player_data[0]}", inline=True)
                 rank_field = player_data[4] if len(player_data) > 4 else None
                 if rank_field:
-                    embed.add_field(name=_t.t(locale, "rank.label"), value=f"{rank_field}", inline=True)
+                    embed.add_field(
+                        name=_t.t(locale, "rank.label"),
+                        value=f"{rank_field}",
+                        inline=True,
+                    )
 
             try:
                 await self.bot.post_to_log_channel(guild.id, embed=embed)
@@ -210,7 +219,9 @@ class AdminCog(commands.Cog):
             except Exception as e:
                 log.warning(f"[RECALL] Could not log to channel: {e}")
 
-        log.info(f"[RECALL] user={member.id} admin={interaction.user.id} reason={reason}")
+        log.info(
+            f"[RECALL] user={member.id} admin={interaction.user.id} reason={reason}"
+        )
 
     @admin.command(
         name="verify",
@@ -252,7 +263,9 @@ class AdminCog(commands.Cog):
             if config.admin_role_id
             else None
         )
-        is_admin_user = (admin_role and admin_role in interaction.user.roles) or interaction.user.guild_permissions.administrator
+        is_admin_user = (
+            admin_role and admin_role in interaction.user.roles
+        ) or interaction.user.guild_permissions.administrator
         if not is_admin_user:
             return await interaction.response.send_message(
                 "❌ You do not have permission to use this command.",
@@ -331,12 +344,16 @@ class AdminCog(commands.Cog):
             verify_role = guild.get_role(config.verified_role_id)
             if verify_role:
                 try:
-                    await member.add_roles(verify_role, reason="Verified via admin command")
+                    await member.add_roles(
+                        verify_role, reason="Verified via admin command"
+                    )
                     feedback.append("✅ Verification role assigned")
                     log.info(f"[ADMIN] Assigned verify role to {member.id}")
                 except Exception as e:
                     feedback.append(f"⚠️ Error assigning verify role: {e}")
-                    log.warning(f"[ADMIN] Error assigning verify role to {member.id}: {e}")
+                    log.warning(
+                        f"[ADMIN] Error assigning verify role to {member.id}: {e}"
+                    )
 
         feedback_text = "\n".join(feedback)
         await interaction.followup.send(feedback_text, ephemeral=True)
@@ -364,10 +381,14 @@ class AdminCog(commands.Cog):
                 if confirmation_view and log_msg:
                     confirmation_view.log_message = log_msg
                     admin_ping = (
-                        f"<@&{config.admin_role_id}>" if config.admin_role_id else "Admins"
+                        f"<@&{config.admin_role_id}>"
+                        if config.admin_role_id
+                        else "Admins"
                     )
                     alliance_display = (
-                        f"[{player_data.alliance_tag}]" if player_data.alliance_tag else "N/A"
+                        f"[{player_data.alliance_tag}]"
+                        if player_data.alliance_tag
+                        else "N/A"
                     )
                     confirm_embed = discord.Embed(
                         title="🔔 Leadership Rank Confirmation Required",
@@ -388,12 +409,17 @@ class AdminCog(commands.Cog):
                         name="Alliance", value=alliance_display, inline=True
                     )
                     confirm_msg = await self.bot.post_to_log_channel(
-                        guild.id, embed=confirm_embed, view=confirmation_view, content=admin_ping
+                        guild.id,
+                        embed=confirm_embed,
+                        view=confirmation_view,
+                        content=admin_ping,
                     )
                     if confirm_msg:
                         confirmation_view.log_message = confirm_msg
                         confirmation_view.confirmation_message_id = confirm_msg.id
-                        confirmation_view.confirmation_channel_id = confirm_msg.channel.id
+                        confirmation_view.confirmation_channel_id = (
+                            confirm_msg.channel.id
+                        )
                         store.save_pending_rank_confirmation(
                             confirm_msg.id,
                             confirm_msg.channel.id,
@@ -441,7 +467,9 @@ class AdminCog(commands.Cog):
             if config.admin_role_id
             else None
         )
-        is_admin_user = (admin_role and admin_role in interaction.user.roles) or interaction.user.guild_permissions.administrator
+        is_admin_user = (
+            admin_role and admin_role in interaction.user.roles
+        ) or interaction.user.guild_permissions.administrator
         if not is_admin_user:
             return await interaction.response.send_message(
                 "❌ You do not have permission to use this command.",

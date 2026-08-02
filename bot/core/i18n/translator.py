@@ -26,7 +26,7 @@ class Translator:
             data = json.load(handle)
 
         if not isinstance(data, dict):
-            raise ValueError(f"Translation file {path} must contain a JSON object")
+            raise TypeError(f"Translation file {path} must contain a JSON object")
 
         parsed = {str(key): str(value) for key, value in data.items()}
         self._cache[normalized] = parsed
@@ -44,4 +44,3 @@ class Translator:
             return key
 
         return safe_format(template, kwargs)
-

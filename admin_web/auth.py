@@ -6,9 +6,9 @@ import secrets
 from fastapi import Request
 from itsdangerous import BadSignature, BadTimeSignature, URLSafeTimedSerializer
 
+from admin_web.config import AdminWebConfig
 from admin_web.discord_api import DiscordAPI, DiscordAPIError, has_manage_guild
 from admin_web.sessions import AdminSession, SessionStore
-from admin_web.config import AdminWebConfig
 from bot.core.store import ProfileStore
 
 log = logging.getLogger("admin_web")
@@ -135,7 +135,9 @@ class AdminContext:
                 "Could not reach Discord to verify your permissions — try again later."
             ) from exc
 
-    async def accessible_guilds(self, request: Request, session: AdminSession) -> list[dict]:
+    async def accessible_guilds(
+        self, request: Request, session: AdminSession
+    ) -> list[dict]:
         """Guilds where the user can manage AND the bot is present.
 
         The user's membership and permissions are re-fetched from Discord on
@@ -152,7 +154,9 @@ class AdminContext:
             guild
             for guild in user_guilds
             if int(guild["id"]) in bot_ids
-            and has_manage_guild(int(guild.get("permissions") or 0), bool(guild.get("owner")))
+            and has_manage_guild(
+                int(guild.get("permissions") or 0), bool(guild.get("owner"))
+            )
         ]
 
     async def require_guild(self, request: Request, guild_id: int) -> dict:
@@ -171,6 +175,10 @@ class AdminContext:
             raise AccessDenied("You are not a member of this server.")
         if guild_id not in bot_ids:
             raise AccessDenied("The verification bot is not present in this server.")
-        if not has_manage_guild(int(guild.get("permissions") or 0), bool(guild.get("owner"))):
-            raise AccessDenied("You need Manage Server or Administrator permission for this server.")
+        if not has_manage_guild(
+            int(guild.get("permissions") or 0), bool(guild.get("owner"))
+        ):
+            raise AccessDenied(
+                "You need Manage Server or Administrator permission for this server."
+            )
         return guild

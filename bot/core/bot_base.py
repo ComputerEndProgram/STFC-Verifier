@@ -4,8 +4,7 @@ import json
 import logging
 import pathlib
 import sqlite3
-from datetime import datetime
-from typing import Optional
+from datetime import UTC, datetime
 
 import discord
 from discord.ext import commands, tasks
@@ -46,7 +45,7 @@ class BaseBot(commands.Bot):
             format="%(asctime)s %(levelname)-7s %(name)s :: %(message)s",
         )
 
-    def get_guild_config(self, guild_id: int) -> Optional[GuildConfig]:
+    def get_guild_config(self, guild_id: int) -> GuildConfig | None:
         return self.store.get_guild_config(guild_id)
 
     def save_guild_config(self, config: GuildConfig) -> None:
@@ -96,9 +95,15 @@ class BaseBot(commands.Bot):
                 try:
                     user = await self.fetch_user(user_id)
                     channel = user.dm_channel or await user.create_dm()
-                    msg = await channel.fetch_message(row["message_id"])
-                except (discord.NotFound, discord.Forbidden, discord.HTTPException) as e:
-                    log.warning(f"[SETUP] Could not restore wizard view {row['message_id']}: {e}")
+                    await channel.fetch_message(row["message_id"])
+                except (
+                    discord.NotFound,
+                    discord.Forbidden,
+                    discord.HTTPException,
+                ) as e:
+                    log.warning(
+                        f"[SETUP] Could not restore wizard view {row['message_id']}: {e}"
+                    )
                     self.store.delete_pending_wizard_view(row["message_id"])
                     continue
 
@@ -110,7 +115,7 @@ class BaseBot(commands.Bot):
                 if view_type == "StartWizardView":
                     view = StartWizardView(
                         self.store,
-                        lambda: _support_ticket_text(support_channel_id),
+                        lambda sid=support_channel_id: _support_ticket_text(sid),
                         self._t,
                         guild_id=guild_id,
                     )
@@ -129,7 +134,9 @@ class BaseBot(commands.Bot):
                 view.confirmation_message_id = row["message_id"]
                 view.confirmation_channel_id = row["channel_id"]
                 self.add_view(view, message_id=row["message_id"])
-                log.info(f"[SETUP] Restored {view_type} for user {user_id} (msg: {row['message_id']})")
+                log.info(
+                    f"[SETUP] Restored {view_type} for user {user_id} (msg: {row['message_id']})"
+                )
         except Exception as e:
             log.error(f"[SETUP] Error restoring wizard views: {e}")
 
@@ -147,7 +154,9 @@ class BaseBot(commands.Bot):
                     except Exception:
                         channel = None
                 if not channel or not getattr(channel, "guild", None):
-                    log.warning(f"[SETUP] Channel {row['channel_id']} not found for pending confirmation {row['message_id']}")
+                    log.warning(
+                        f"[SETUP] Channel {row['channel_id']} not found for pending confirmation {row['message_id']}"
+                    )
                     continue
 
                 guild = channel.guild
@@ -155,7 +164,9 @@ class BaseBot(commands.Bot):
                 try:
                     msg = await channel.fetch_message(row["message_id"])
                 except (discord.NotFound, discord.Forbidden):
-                    log.warning(f"[SETUP] Message {row['message_id']} not found, cleaning up")
+                    log.warning(
+                        f"[SETUP] Message {row['message_id']} not found, cleaning up"
+                    )
                     self.store.delete_pending_rank_confirmation(row["message_id"])
                     continue
                 view = RankConfirmationView(
@@ -173,7 +184,9 @@ class BaseBot(commands.Bot):
                 view.confirmation_message_id = row["message_id"]
                 view.confirmation_channel_id = row["channel_id"]
                 self.add_view(view, message_id=row["message_id"])
-                log.info(f"[SETUP] Restored rank confirmation for {row['member_name']} (msg: {row['message_id']})")
+                log.info(
+                    f"[SETUP] Restored rank confirmation for {row['member_name']} (msg: {row['message_id']})"
+                )
         except Exception as e:
             log.error(f"[SETUP] Error restoring pending confirmations: {e}")
 
@@ -186,7 +199,7 @@ class BaseBot(commands.Bot):
         embed: discord.Embed = None,
         file: discord.File = None,
         view: discord.ui.View = None,
-        content: str = None,
+        content: str | None = None,
     ):
         config = self.get_guild_config(guild_id)
         if not config or not config.log_channel_id:
@@ -196,7 +209,9 @@ class BaseBot(commands.Bot):
             return None
         log_ch = guild.get_channel(config.log_channel_id)
         if not log_ch:
-            log.warning(f"[LOG] Log channel {config.log_channel_id} not found in guild {guild_id}")
+            log.warning(
+                f"[LOG] Log channel {config.log_channel_id} not found in guild {guild_id}"
+            )
             return None
         try:
             return await log_ch.send(content=content, embed=embed, file=file, view=view)
@@ -213,7 +228,9 @@ class BaseBot(commands.Bot):
             return
         admin_role = guild.get_role(config.admin_role_id)
         if not admin_role:
-            log.warning(f"[ADMIN] Admin role {config.admin_role_id} not found in guild {guild_id}")
+            log.warning(
+                f"[ADMIN] Admin role {config.admin_role_id} not found in guild {guild_id}"
+            )
             return
         for channel in guild.text_channels:
             try:
@@ -238,7 +255,9 @@ class BaseBot(commands.Bot):
             await self._handle_expired_session(message, user_id)
             return
 
-        log.info(f"[WIZARD] Received DM from {user_id}: '{message.content[:50]}'... (step: {session['step']})")
+        log.info(
+            f"[WIZARD] Received DM from {user_id}: '{message.content[:50]}'... (step: {session['step']})"
+        )
 
         try:
             if session["step"] == 1:
@@ -246,7 +265,7 @@ class BaseBot(commands.Bot):
             elif session["step"] == 2:
                 await self._handle_step2(message, user_id, session)
         except Exception as e:
-            log.error(f"[WIZARD] Error in wizard flow for user {user_id}: {e}", exc_info=True)
+            log.exception(f"[WIZARD] Error in wizard flow for user {user_id}")
             await message.reply(f"❌ An error occurred: {e}")
             self.store.delete_wizard_session(user_id)
 
@@ -259,8 +278,8 @@ class BaseBot(commands.Bot):
                     channel = await self.fetch_channel(v["channel_id"])
                 msg = await channel.fetch_message(v["message_id"])
                 await msg.edit(view=None)
-            except Exception:
-                pass
+            except Exception as e:
+                log.debug(f"[CLEANUP] Could not remove wizard view: {e}")
             self.store.delete_pending_wizard_view(v["message_id"])
 
     async def _handle_expired_session(self, message: discord.Message, user_id: int):
@@ -272,8 +291,12 @@ class BaseBot(commands.Bot):
             row = cursor.fetchone()
             if row:
                 expires_at = datetime.fromisoformat(row[0])
-                if datetime.now() > expires_at:
-                    conn.execute("DELETE FROM wizard_sessions WHERE user_id = ?", (user_id,))
+                if expires_at.tzinfo is None:
+                    expires_at = expires_at.replace(tzinfo=UTC)
+                if datetime.now(UTC) > expires_at:
+                    conn.execute(
+                        "DELETE FROM wizard_sessions WHERE user_id = ?", (user_id,)
+                    )
                     conn.commit()
                     embed = discord.Embed(
                         title=self._t.t(None, "wizard.session_expired_title"),
@@ -281,12 +304,17 @@ class BaseBot(commands.Bot):
                         colour=discord.Colour.orange(),
                     )
                     msg = await message.author.send(
-                        embed=embed, view=SessionExpiredView(user_id, self.store, self._t)
+                        embed=embed,
+                        view=SessionExpiredView(user_id, self.store, self._t),
                     )
-                    self.store.save_pending_wizard_view(msg.id, msg.channel.id, user_id, "SessionExpiredView")
+                    self.store.save_pending_wizard_view(
+                        msg.id, msg.channel.id, user_id, "SessionExpiredView"
+                    )
                     log.info(f"[WIZARD] Notified user {user_id} of session expiration")
 
-    async def _handle_step1(self, message: discord.Message, user_id: int, session: dict):
+    async def _handle_step1(
+        self, message: discord.Message, user_id: int, session: dict
+    ):
         from bot.core.stfc_scraper import STFCProScraper
 
         guild_id = session.get("guild_id")
@@ -301,24 +329,32 @@ class BaseBot(commands.Bot):
 
         player_data = STFCProScraper.fetch_player_data(player_id)
         if not player_data:
-            await message.reply(self._t.t(None, "wizard.fetch_failed", player_id=player_id))
+            await message.reply(
+                self._t.t(None, "wizard.fetch_failed", player_id=player_id)
+            )
             return
 
-        player_data_json = json.dumps({
-            "player_id": player_data.player_id,
-            "username": player_data.username,
-            "level": player_data.level,
-            "server": player_data.server,
-            "alliance_tag": player_data.alliance_tag,
-            "rank": getattr(player_data, "rank", None),
-        })
-        self.store.update_wizard_session(user_id, stfc_link=player_link, player_data_json=player_data_json)
+        player_data_json = json.dumps(
+            {
+                "player_id": player_data.player_id,
+                "username": player_data.username,
+                "level": player_data.level,
+                "server": player_data.server,
+                "alliance_tag": player_data.alliance_tag,
+                "rank": getattr(player_data, "rank", None),
+            }
+        )
+        self.store.update_wizard_session(
+            user_id, stfc_link=player_link, player_data_json=player_data_json
+        )
         self.store.update_wizard_session(user_id, step=2)
 
         if not require_screenshot:
             self.store.update_wizard_session(user_id, step=3)
             await self._show_summary_view(message, user_id, guild_id)
-            log.info(f"[WIZARD] User {user_id} provided STFC link, skipping screenshot step")
+            log.info(
+                f"[WIZARD] User {user_id} provided STFC link, skipping screenshot step"
+            )
             return
 
         embed = discord.Embed(
@@ -327,24 +363,34 @@ class BaseBot(commands.Bot):
             colour=discord.Colour.blue(),
         )
         embed.set_footer(text=self._t.t(None, "wizard.step2.footer"))
-        msg = await message.reply(embed=embed, view=SkipStepsView(user_id, self.store, self._t))
-        self.store.save_pending_wizard_view(msg.id, msg.channel.id, user_id, "SkipStepsView")
+        msg = await message.reply(
+            embed=embed, view=SkipStepsView(user_id, self.store, self._t)
+        )
+        self.store.save_pending_wizard_view(
+            msg.id, msg.channel.id, user_id, "SkipStepsView"
+        )
         log.info(f"[WIZARD] User {user_id} provided STFC link, moving to step 2")
 
-    async def _handle_step2(self, message: discord.Message, user_id: int, session: dict):
+    async def _handle_step2(
+        self, message: discord.Message, user_id: int, session: dict
+    ):
         if not message.attachments:
             await message.reply(self._t.t(None, "wizard.no_screenshot"))
             return
 
         screenshot = message.attachments[0]
-        if not screenshot.content_type or not screenshot.content_type.startswith("image/"):
+        if not screenshot.content_type or not screenshot.content_type.startswith(
+            "image/"
+        ):
             await message.reply(self._t.t(None, "wizard.no_image"))
             return
 
         try:
             img_bytes = await screenshot.read()
             screenshot_b64 = base64.b64encode(img_bytes).decode("utf-8")
-            self.store.update_wizard_session(user_id, screenshot_data=screenshot_b64, step=3)
+            self.store.update_wizard_session(
+                user_id, screenshot_data=screenshot_b64, step=3
+            )
         except Exception as e:
             log.error(f"[WIZARD] Failed to read screenshot: {e}")
             await message.reply(self._t.t(None, "wizard.screenshot_error"))
@@ -354,7 +400,9 @@ class BaseBot(commands.Bot):
         await self._show_summary_view(message, user_id, guild_id)
         log.info(f"[WIZARD] User {user_id} provided screenshot, showing summary")
 
-    async def _show_summary_view(self, message: discord.Message, user_id: int, guild_id: Optional[int]):
+    async def _show_summary_view(
+        self, message: discord.Message, user_id: int, guild_id: int | None
+    ):
         await self._cleanup_user_wizard_views(user_id)
 
         player_data = self.store.get_wizard_player_data(user_id)
@@ -367,37 +415,55 @@ class BaseBot(commands.Bot):
         bot_profile_name = config.bot_profile if config else "stfc_verifier"
         profile = get_profile(bot_profile_name)
 
-        embed = profile.build_summary_embed(player_data, config, self._t) if config else discord.Embed(
-            title=self._t.t(None, "wizard.summary_title"),
-            description=self._t.t(None, "wizard.summary_description"),
-            colour=discord.Colour.gold(),
+        embed = (
+            profile.build_summary_embed(player_data, config, self._t)
+            if config
+            else discord.Embed(
+                title=self._t.t(None, "wizard.summary_title"),
+                description=self._t.t(None, "wizard.summary_description"),
+                colour=discord.Colour.gold(),
+            )
         )
         msg = await message.reply(
             embed=embed,
-            view=ConfirmVerificationView(user_id, self.store, self._finalize_verification, self._t),
+            view=ConfirmVerificationView(
+                user_id, self.store, self._finalize_verification, self._t
+            ),
         )
-        self.store.save_pending_wizard_view(msg.id, msg.channel.id, user_id, "ConfirmVerificationView")
+        self.store.save_pending_wizard_view(
+            msg.id, msg.channel.id, user_id, "ConfirmVerificationView"
+        )
 
-    async def _finalize_verification(self, interaction: discord.Interaction, session: dict):
+    async def _finalize_verification(
+        self, interaction: discord.Interaction, session: dict
+    ):
         user_id = session["user_id"]
         guild_id = session.get("guild_id")
         if not guild_id:
-            await interaction.followup.send(self._t.t(None, "wizard.guild_not_found"), ephemeral=True)
+            await interaction.followup.send(
+                self._t.t(None, "wizard.guild_not_found"), ephemeral=True
+            )
             return
 
         config = self.get_guild_config(guild_id)
         if not config:
-            await interaction.followup.send(self._t.t(None, "wizard.guild_not_found"), ephemeral=True)
+            await interaction.followup.send(
+                self._t.t(None, "wizard.guild_not_found"), ephemeral=True
+            )
             return
 
         guild = self.get_guild(guild_id)
         if not guild:
-            await interaction.followup.send(self._t.t(None, "wizard.guild_not_found"), ephemeral=True)
+            await interaction.followup.send(
+                self._t.t(None, "wizard.guild_not_found"), ephemeral=True
+            )
             return
 
         member = guild.get_member(user_id)
         if not member:
-            await interaction.followup.send(self._t.t(None, "wizard.member_not_found"), ephemeral=True)
+            await interaction.followup.send(
+                self._t.t(None, "wizard.member_not_found"), ephemeral=True
+            )
             return
 
         player_link = session["stfc_link"]
@@ -405,7 +471,9 @@ class BaseBot(commands.Bot):
 
         player_id = STFCProScraper.extract_player_id_from_url(player_link)
         if not player_id:
-            await interaction.followup.send(self._t.t(None, "wizard.invalid_link_stored"), ephemeral=True)
+            await interaction.followup.send(
+                self._t.t(None, "wizard.invalid_link_stored"), ephemeral=True
+            )
             return
 
         if self.store.is_player_id_taken(player_id, exclude_user_id=user_id):
@@ -417,7 +485,9 @@ class BaseBot(commands.Bot):
 
         player_data = STFCProScraper.fetch_player_data(player_id)
         if not player_data:
-            await interaction.followup.send(self._t.t(None, "wizard.fetch_error"), ephemeral=True)
+            await interaction.followup.send(
+                self._t.t(None, "wizard.fetch_error"), ephemeral=True
+            )
             return
 
         profile = get_profile(config.bot_profile)
@@ -458,33 +528,51 @@ class BaseBot(commands.Bot):
                     feedback.append(self._t.t(None, "wizard.verify_role_assigned"))
                     log.info(f"[WIZARD] Assigned verify role to {member.id}")
                 except Exception as e:
-                    feedback.append(self._t.t(None, "wizard.verify_role_error", error=e))
-                    log.warning(f"[WIZARD] Error assigning verify role to {member.id}: {e}")
+                    feedback.append(
+                        self._t.t(None, "wizard.verify_role_error", error=e)
+                    )
+                    log.warning(
+                        f"[WIZARD] Error assigning verify role to {member.id}: {e}"
+                    )
 
         feedback_text = "\n".join(feedback)
         await interaction.followup.send(feedback_text, ephemeral=True)
 
         if config.log_channel_id:
-            embed = profile.build_log_embed(member, player_data, session, self._t, interaction.locale)
+            embed = profile.build_log_embed(
+                member, player_data, session, self._t, interaction.locale
+            )
             screenshot_file = None
             if session.get("screenshot_data"):
                 try:
                     screenshot_bytes = base64.b64decode(session["screenshot_data"])
-                    screenshot_file = discord.File(io.BytesIO(screenshot_bytes), filename="verification.png")
+                    screenshot_file = discord.File(
+                        io.BytesIO(screenshot_bytes), filename="verification.png"
+                    )
                     embed.set_image(url="attachment://verification.png")
                 except Exception as e:
                     log.warning(f"[WIZARD] Could not decode screenshot: {e}")
 
             try:
                 if screenshot_file:
-                    log_msg = await self.post_to_log_channel(guild.id, embed=embed, file=screenshot_file)
+                    log_msg = await self.post_to_log_channel(
+                        guild.id, embed=embed, file=screenshot_file
+                    )
                 else:
                     log_msg = await self.post_to_log_channel(guild.id, embed=embed)
 
                 if confirmation_view and log_msg:
                     confirmation_view.log_message = log_msg
-                    admin_ping = f"<@&{config.admin_role_id}>" if config.admin_role_id else "Admins"
-                    alliance_display = f"[{player_data.alliance_tag}]" if player_data.alliance_tag else "N/A"
+                    admin_ping = (
+                        f"<@&{config.admin_role_id}>"
+                        if config.admin_role_id
+                        else "Admins"
+                    )
+                    alliance_display = (
+                        f"[{player_data.alliance_tag}]"
+                        if player_data.alliance_tag
+                        else "N/A"
+                    )
                     confirm_embed = discord.Embed(
                         title=self._t.t(None, "wizard.log_confirm_title"),
                         description=self._t.t(None, "wizard.log_confirm_desc"),
@@ -501,18 +589,28 @@ class BaseBot(commands.Bot):
                         inline=True,
                     )
                     confirm_embed.add_field(
-                        name=self._t.t(None, "rank.alliance_label"), value=alliance_display, inline=True
+                        name=self._t.t(None, "rank.alliance_label"),
+                        value=alliance_display,
+                        inline=True,
                     )
                     confirm_msg = await self.post_to_log_channel(
-                        guild.id, embed=confirm_embed, view=confirmation_view, content=admin_ping
+                        guild.id,
+                        embed=confirm_embed,
+                        view=confirmation_view,
+                        content=admin_ping,
                     )
                     if confirm_msg:
                         confirmation_view.log_message = confirm_msg
                         confirmation_view.confirmation_message_id = confirm_msg.id
-                        confirmation_view.confirmation_channel_id = confirm_msg.channel.id
+                        confirmation_view.confirmation_channel_id = (
+                            confirm_msg.channel.id
+                        )
                         self.store.save_pending_rank_confirmation(
-                            confirm_msg.id, confirm_msg.channel.id,
-                            member.id, str(member), player_data.rank,
+                            confirm_msg.id,
+                            confirm_msg.channel.id,
+                            member.id,
+                            str(member),
+                            player_data.rank,
                             player_data.username,
                             player_data.alliance_tag or "N/A",
                         )
@@ -567,10 +665,14 @@ class BaseBot(commands.Bot):
                     locale=member.guild.preferred_locale,
                 ),
             )
-            self.store.save_pending_wizard_view(msg.id, msg.channel.id, member.id, "StartWizardView")
+            self.store.save_pending_wizard_view(
+                msg.id, msg.channel.id, member.id, "StartWizardView"
+            )
             log.info(f"[WIZARD] Sent welcome message to new member {member.id}")
         except discord.Forbidden:
-            log.warning(f"[WIZARD] Could not send DM to new member {member.id} (DMs disabled)")
+            log.warning(
+                f"[WIZARD] Could not send DM to new member {member.id} (DMs disabled)"
+            )
         except Exception as e:
             log.error(f"[WIZARD] Error sending welcome to member {member.id}: {e}")
 
@@ -580,7 +682,9 @@ class BaseBot(commands.Bot):
             return
         if self.store.get_player_data(member.id):
             self.store.delete_verification(member.id)
-            self.store.log_verification_action(member.id, "removed", None, "User left the server")
+            self.store.log_verification_action(
+                member.id, "removed", None, "User left the server"
+            )
             log.info(f"[DB] Deleted verification for user {member.id} (left server)")
         self.store.delete_wizard_session(member.id)
         log.info(f"[WIZARD] Cleared wizard session for user {member.id}")
@@ -596,7 +700,7 @@ class BaseBot(commands.Bot):
             log.info("[UPDATE] No players to check")
             return
 
-        now = datetime.now()
+        now = datetime.now(UTC)
         log.info("[UPDATE] Starting periodic player update check")
 
         for config in configs:
@@ -617,12 +721,17 @@ class BaseBot(commands.Bot):
 
                 try:
                     from bot.core.stfc_scraper import STFCProScraper
+
                     player_data = STFCProScraper.fetch_player_data(player_id)
                     if not player_data:
-                        log.warning(f"[UPDATE] Could not fetch data for player {player_id}")
+                        log.warning(
+                            f"[UPDATE] Could not fetch data for player {player_id}"
+                        )
                         continue
 
-                    await profile.handle_update(self, member, user_id, stfc_link, player_data, config)
+                    await profile.handle_update(
+                        self, member, user_id, stfc_link, player_data, config
+                    )
                 except Exception as e:
                     log.error(f"[UPDATE] Error updating player {player_id}: {e}")
 

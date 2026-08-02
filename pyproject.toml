@@ -4,6 +4,7 @@ version = "0.1.0"
 description = "STFC Verifier — Discord verification bot with profile-driven behavior."
 readme = "README.md"
 requires-python = ">=3.11"
+
 dependencies = [
   "discord.py",
   "python-dotenv",
@@ -27,6 +28,10 @@ dev = [
 [project.scripts]
 stfc-verifier = "bot.main:main"
 
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
 [tool.setuptools.packages.find]
 include = ["bot*", "admin_web*"]
 
@@ -37,3 +42,10 @@ include = ["bot*", "admin_web*"]
 [tool.pytest.ini_options]
 testpaths = ["tests"]
 pythonpath = ["."]
+
+[tool.ruff.lint]
+ignore = [
+  # Deliberate: a Discord bot must not crash when a single member action
+  # (role/DM/channel) fails; every broad catch logs and continues.
+  "BLE001",
+]

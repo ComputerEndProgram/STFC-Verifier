@@ -33,9 +33,11 @@ class AdminWebConfig:
         return "admin_web_session"
 
     @classmethod
-    def from_env(cls) -> "AdminWebConfig":
+    def from_env(cls) -> AdminWebConfig:
         load_dotenv(find_dotenv(usecwd=True))
-        base_url = (env.optional("ADMIN_WEB_BASE_URL") or "http://127.0.0.1:8787").rstrip("/")
+        base_url = (
+            env.optional("ADMIN_WEB_BASE_URL") or "http://127.0.0.1:8787"
+        ).rstrip("/")
         cookie_secure = env.optional("ADMIN_WEB_COOKIE_SECURE")
         if cookie_secure is None:
             cookie_secure = base_url.startswith("https://")

@@ -17,7 +17,9 @@ PROFILE_FIELDS = {
     name: frozenset(profile.config_fields) for name, profile in PROFILE_REGISTRY.items()
 }
 
-CHANNEL_FIELDS = frozenset({"verify_channel_id", "log_channel_id", "support_channel_id"})
+CHANNEL_FIELDS = frozenset(
+    {"verify_channel_id", "log_channel_id", "support_channel_id"}
+)
 ROLE_FIELDS = frozenset(
     {
         "verified_role_id",
@@ -44,7 +46,15 @@ GROUPS: list[tuple[str, list[str]]] = [
         ],
     ),
     ("Criteria", ["minimum_ops_level", "stfc_server_number"]),
-    ("Behavior", ["update_check_hours", "session_ttl_hours", "require_screenshot", "manage_alliance_roles"]),
+    (
+        "Behavior",
+        [
+            "update_check_hours",
+            "session_ttl_hours",
+            "require_screenshot",
+            "manage_alliance_roles",
+        ],
+    ),
 ]
 
 FIELD_LABELS = {
@@ -152,7 +162,9 @@ def build_form_spec(profile: str | None = None) -> list[dict]:
             groups.append({"label": group_label, "fields": specs})
 
     covered = {name for _, names in GROUPS for name in names}
-    extras = [name for name in model_fields if name not in covered and name != "guild_id"]
+    extras = [
+        name for name in model_fields if name not in covered and name != "guild_id"
+    ]
     if extras:
         specs = []
         for name in extras:
@@ -174,7 +186,11 @@ def build_form_spec(profile: str | None = None) -> list[dict]:
 
 
 def _profiles_for(field_name: str) -> list[str]:
-    return [name for name, profile_fields in PROFILE_FIELDS.items() if field_name in profile_fields]
+    return [
+        name
+        for name, profile_fields in PROFILE_FIELDS.items()
+        if field_name in profile_fields
+    ]
 
 
 def config_to_values(config: GuildConfig | None) -> dict:
@@ -183,9 +199,7 @@ def config_to_values(config: GuildConfig | None) -> dict:
         if field.name == "guild_id":
             continue
         value = getattr(config, field.name) if config else field.default
-        if field.name == "bot_profile":
-            values[field.name] = value
-        elif isinstance(value, bool):
+        if field.name == "bot_profile" or isinstance(value, bool):
             values[field.name] = value
         elif value is None:
             values[field.name] = ""

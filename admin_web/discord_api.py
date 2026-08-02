@@ -34,7 +34,9 @@ async def _get_with_retry(
             resp = await client.get(url, headers=headers)
         except httpx.TransportError as exc:
             if attempt == max_retries:
-                raise DiscordAPIError(f"Discord GET {label} failed (network error)") from exc
+                raise DiscordAPIError(
+                    f"Discord GET {label} failed (network error)"
+                ) from exc
             await asyncio.sleep(0.5 * (attempt + 1))
             continue
         if resp.status_code in TRANSIENT_STATUSES and attempt < max_retries:
@@ -110,7 +112,8 @@ class DiscordAPI:
         resp = await client.post(OAUTH_TOKEN_URL, data=data, headers=headers)
         if resp.status_code != 200:
             raise DiscordAPIError(
-                f"Discord token exchange failed (HTTP {resp.status_code})", resp.status_code
+                f"Discord token exchange failed (HTTP {resp.status_code})",
+                resp.status_code,
             )
         return resp.json()
 
@@ -143,12 +146,15 @@ class DiscordAPI:
 
     async def _bearer_get(self, path: str, access_token: str) -> dict | list[dict]:
         headers = {"Authorization": f"Bearer {access_token}"}
-        resp = await _get_with_retry(await self._http(), f"{API_BASE}{path}", headers, label=path)
+        resp = await _get_with_retry(
+            await self._http(), f"{API_BASE}{path}", headers, label=path
+        )
         if resp.status_code == 401:
             raise DiscordAPIError("Discord access token rejected (HTTP 401)", 401)
         if resp.status_code != 200:
             raise DiscordAPIError(
-                f"Discord API GET {path} failed (HTTP {resp.status_code})", resp.status_code
+                f"Discord API GET {path} failed (HTTP {resp.status_code})",
+                resp.status_code,
             )
         return resp.json()
 
@@ -159,11 +165,15 @@ class DiscordAPI:
         """
         headers = {"Authorization": f"Bot {self.bot_token}"}
         resp = await _get_with_retry(
-            await self._http(), f"{API_BASE}/users/@me/guilds", headers, label="bot guilds"
+            await self._http(),
+            f"{API_BASE}/users/@me/guilds",
+            headers,
+            label="bot guilds",
         )
         if resp.status_code != 200:
             raise DiscordAPIError(
-                f"Discord bot guild lookup failed (HTTP {resp.status_code})", resp.status_code
+                f"Discord bot guild lookup failed (HTTP {resp.status_code})",
+                resp.status_code,
             )
         return {int(g["id"]) for g in resp.json()}
 
@@ -177,7 +187,8 @@ class DiscordAPI:
         )
         if resp.status_code != 200:
             raise DiscordAPIError(
-                f"Discord channel lookup failed (HTTP {resp.status_code})", resp.status_code
+                f"Discord channel lookup failed (HTTP {resp.status_code})",
+                resp.status_code,
             )
         return resp.json()
 
@@ -191,6 +202,7 @@ class DiscordAPI:
         )
         if resp.status_code != 200:
             raise DiscordAPIError(
-                f"Discord role lookup failed (HTTP {resp.status_code})", resp.status_code
+                f"Discord role lookup failed (HTTP {resp.status_code})",
+                resp.status_code,
             )
         return resp.json()

@@ -3,8 +3,8 @@ from unittest.mock import AsyncMock, MagicMock
 import pytest
 
 from bot.config.guild_config import GuildConfig
-from bot.profiles.veil_security.profile import VeilSecurityProfile
 from bot.core.store import PlayerData
+from bot.profiles.veil_security.profile import VeilSecurityProfile
 
 
 @pytest.mark.anyio

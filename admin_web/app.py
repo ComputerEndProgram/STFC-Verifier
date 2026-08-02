@@ -35,7 +35,9 @@ BASE_DIR = Path(__file__).resolve().parent
 async def lifespan(app: FastAPI):
     cfg = AdminWebConfig.from_env()
     store = ProfileStore(str(cfg.bot_settings.database_path))
-    sessions = SessionStore(str(cfg.bot_settings.database_path), ttl_days=cfg.session_ttl_days)
+    sessions = SessionStore(
+        str(cfg.bot_settings.database_path), ttl_days=cfg.session_ttl_days
+    )
     discord = DiscordAPI(
         client_id=cfg.client_id,
         client_secret=cfg.client_secret,
@@ -72,7 +74,9 @@ def _profile_label(name: str | None) -> str | None:
 TEXT_CHANNEL_TYPES = (0, 5)  # GUILD_TEXT, GUILD_ANNOUNCEMENT
 
 
-async def _guild_lookup_options(ctx: AdminContext, guild_id: int) -> tuple[list[dict], list[dict]]:
+async def _guild_lookup_options(
+    ctx: AdminContext, guild_id: int
+) -> tuple[list[dict], list[dict]]:
     """Channels/roles of a guild the bot is in, for the form's search fields.
 
     Falls back to empty lists on failure so the page still renders.
@@ -356,9 +360,7 @@ async def guild_config_save(request: Request, guild_id: int):
         config = ctx.store.get_guild_config(guild_id)
         channels, roles = await _guild_lookup_options(ctx, guild_id)
         nav_top, nav_bottom = _user_nav(session)
-        nav_bottom.insert(
-            0, {"label": "Error", "color": "alert"}
-        )
+        nav_bottom.insert(0, {"label": "Error", "color": "alert"})
         return _render(
             request,
             "guild.html",

@@ -14,8 +14,13 @@ One codebase, one bot process, many servers. Each server's verification profile 
 
 ## Quick Start
 
+Requires Python 3.11+. Either installer works — [uv](https://docs.astral.sh/uv/) (recommended) or pip.
+
 ```bash
-# Set up a virtualenv and install (editable mode with dev dependencies)
+# Option A: uv (recommended) — installs deps + creates .venv from the lockfile
+uv sync --extra dev
+
+# Option B: pip
 python3 -m venv .venv
 .venv/bin/pip install -e ".[dev]"
 

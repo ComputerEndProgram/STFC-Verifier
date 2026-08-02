@@ -1,2 +1,1 @@
 """Verification wizard flow."""
-

@@ -4,11 +4,11 @@ import json
 import secrets
 import sqlite3
 from dataclasses import dataclass
-from datetime import datetime, timedelta, timezone
+from datetime import UTC, datetime, timedelta
 
 
 def _utcnow() -> datetime:
-    return datetime.now(timezone.utc)
+    return datetime.now(UTC)
 
 
 @dataclass
@@ -59,7 +59,10 @@ class SessionStore:
                 )
                 """
             )
-            conn.execute("DELETE FROM admin_sessions WHERE updated_at < ?", ((_utcnow() - self.ttl).isoformat(),))
+            conn.execute(
+                "DELETE FROM admin_sessions WHERE updated_at < ?",
+                ((_utcnow() - self.ttl).isoformat(),),
+            )
             conn.commit()
 
     def create(
@@ -72,7 +75,11 @@ class SessionStore:
     ) -> AdminSession:
         token = secrets.token_urlsafe(32)
         csrf = secrets.token_urlsafe(24)
-        expires_at = _utcnow() + timedelta(seconds=expires_in) if expires_in else _utcnow() + self.ttl
+        expires_at = (
+            _utcnow() + timedelta(seconds=expires_in)
+            if expires_in
+            else _utcnow() + self.ttl
+        )
         now = _utcnow()
         session = AdminSession(
             token=token,
@@ -123,16 +130,25 @@ class SessionStore:
             updated_at=datetime.fromisoformat(row["updated_at"]),
         )
 
-    def update(self, session: AdminSession, *, access_token: str, expires_in: int | None) -> None:
+    def update(
+        self, session: AdminSession, *, access_token: str, expires_in: int | None
+    ) -> None:
         session.access_token = access_token
         session.expires_at = (
-            _utcnow() + timedelta(seconds=expires_in) if expires_in else session.expires_at
+            _utcnow() + timedelta(seconds=expires_in)
+            if expires_in
+            else session.expires_at
         )
         session.touch()
         with self._connect() as conn:
             conn.execute(
                 "UPDATE admin_sessions SET access_token = ?, expires_at = ?, updated_at = ? WHERE token = ?",
-                (session.access_token, session.expires_at.isoformat(), session.updated_at.isoformat(), session.token),
+                (
+                    session.access_token,
+                    session.expires_at.isoformat(),
+                    session.updated_at.isoformat(),
+                    session.token,
+                ),
             )
             conn.commit()
 

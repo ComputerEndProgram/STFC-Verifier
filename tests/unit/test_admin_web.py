@@ -7,7 +7,6 @@ from starlette.testclient import TestClient
 from admin_web.app import app
 from admin_web.discord_api import DiscordAPI
 from bot.core.store import ProfileStore
-from bot.config.guild_config import GuildConfig
 
 MANAGE_GUILD = 1 << 5
 ADMINISTRATOR = 1 << 3
@@ -25,7 +24,9 @@ def _guild(gid: int, name: str, permissions: int, owner: bool = False) -> dict:
     }
 
 
-def _install_discord_mocks(client, user_guilds, bot_ids, guild_channels=(), guild_roles=()) -> None:
+def _install_discord_mocks(
+    client, user_guilds, bot_ids, guild_channels=(), guild_roles=()
+) -> None:
     discord = client.app.state.discord
 
     async def get_user_guilds(access_token):
@@ -251,7 +252,11 @@ def test_discord_api_retries_transient_errors():
         return httpx.Response(200, json=[{"id": "1", "name": "general", "type": 0}])
 
     api = DiscordAPI(
-        client_id="1", client_secret="s", redirect_uri="x", bot_token="b", scopes="identify"
+        client_id="1",
+        client_secret="s",
+        redirect_uri="x",
+        bot_token="b",
+        scopes="identify",
     )
 
     async def exercise():

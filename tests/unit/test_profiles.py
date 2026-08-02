@@ -29,19 +29,35 @@ def test_unknown_profile_raises() -> None:
 
 def test_stfc_verifier_nickname_building() -> None:
     profile = STFCVerifierProfile()
-    p1 = PlayerData(player_id="1", username="TestPlayer", level=30, server=106, alliance_tag="ABC")
+    p1 = PlayerData(
+        player_id="1", username="TestPlayer", level=30, server=106, alliance_tag="ABC"
+    )
     assert profile.build_nickname(p1) == "[ABC] TestPlayer"
 
-    p2 = PlayerData(player_id="2", username="TestPlayerNoTag", level=30, server=106, alliance_tag=None)
+    p2 = PlayerData(
+        player_id="2",
+        username="TestPlayerNoTag",
+        level=30,
+        server=106,
+        alliance_tag=None,
+    )
     assert profile.build_nickname(p2) == "TestPlayerNoTag"
 
 
 def test_veil_security_nickname_building() -> None:
     profile = VeilSecurityProfile()
-    p1 = PlayerData(player_id="1", username="TestPlayer", level=30, server=106, alliance_tag="ABC")
+    p1 = PlayerData(
+        player_id="1", username="TestPlayer", level=30, server=106, alliance_tag="ABC"
+    )
     assert profile.build_nickname(p1) == "[106] ABC - TestPlayer"
 
-    p2 = PlayerData(player_id="2", username="TestPlayerNoTag", level=30, server=106, alliance_tag=None)
+    p2 = PlayerData(
+        player_id="2",
+        username="TestPlayerNoTag",
+        level=30,
+        server=106,
+        alliance_tag=None,
+    )
     assert profile.build_nickname(p2) == "[106] TestPlayerNoTag"
 
 
@@ -84,10 +100,17 @@ async def test_stfc_verifier_assign_roles_manage_alliance_true() -> None:
     interaction.followup = AsyncMock()
 
     player_data = PlayerData(
-        player_id="1", username="Player1", level=40, server=106, alliance_tag="ABC", rank="agent"
+        player_id="1",
+        username="Player1",
+        level=40,
+        server=106,
+        alliance_tag="ABC",
+        rank="agent",
     )
 
-    feedback, confirmation_view = await profile.assign_roles(bot, member, player_data, interaction, config)
+    feedback, confirmation_view = await profile.assign_roles(
+        bot, member, player_data, interaction, config
+    )
 
     assert confirmation_view is None
     assert any("Base role assigned" in f for f in feedback)
@@ -123,10 +146,17 @@ async def test_stfc_verifier_assign_roles_manage_alliance_false() -> None:
     interaction.followup = AsyncMock()
 
     player_data = PlayerData(
-        player_id="2", username="Player2", level=40, server=106, alliance_tag="ABC", rank="agent"
+        player_id="2",
+        username="Player2",
+        level=40,
+        server=106,
+        alliance_tag="ABC",
+        rank="agent",
     )
 
-    feedback, confirmation_view = await profile.assign_roles(bot, member, player_data, interaction, config)
+    feedback, confirmation_view = await profile.assign_roles(
+        bot, member, player_data, interaction, config
+    )
 
     assert confirmation_view is None
     assert any("Base role assigned" in f for f in feedback)

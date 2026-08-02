@@ -9,4 +9,3 @@ def normalize_locale(value: object) -> str:
         "nb": "no",
     }
     return aliases.get(language, language)
-

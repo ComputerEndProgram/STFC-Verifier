@@ -25,7 +25,9 @@ class Application:
         avoid asyncio and signal-handler conflicts.
         """
         import logging
+
         import uvicorn
+
         from admin_web.config import AdminWebConfig
 
         log = logging.getLogger("veil_bot")
@@ -34,9 +36,13 @@ class Application:
             try:
                 cfg = AdminWebConfig.from_env()
             except Exception as e:
-                log.error(f"[WEB] Admin web UI could not start (missing configuration?): {e}")
+                log.error(
+                    f"[WEB] Admin web UI could not start (missing configuration?): {e}"
+                )
                 return
-            uvicorn.run("admin_web.app:app", host=cfg.host, port=cfg.port, log_level="info")
+            uvicorn.run(
+                "admin_web.app:app", host=cfg.host, port=cfg.port, log_level="info"
+            )
 
         thread = Thread(target=_serve, name="admin-web", daemon=True)
         thread.start()

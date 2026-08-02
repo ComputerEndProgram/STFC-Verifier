@@ -2,9 +2,8 @@ import json
 import os
 import sqlite3
 from dataclasses import dataclass
-from datetime import datetime, timedelta
+from datetime import UTC, datetime, timedelta
 from pathlib import Path
-from typing import Optional
 
 from bot.config.guild_config import GuildConfig
 
@@ -19,7 +18,7 @@ class PlayerData:
     rank: str = None
 
 
-def _support_ticket_text(support_channel_id: Optional[int]) -> str:
+def _support_ticket_text(support_channel_id: int | None) -> str:
     if support_channel_id:
         return f"Open a support ticket in <#{support_channel_id}>."
     return "Open a support ticket using the support process configured by your admins."
@@ -121,21 +120,32 @@ class ProfileStore:
             cursor = conn.execute("PRAGMA table_info(stfc_players)")
             columns = {row[1] for row in cursor.fetchall()}
 
-            for col in ("verification_status", "verified_at", "rank", "alliance_role_id"):
+            for col in (
+                "verification_status",
+                "verified_at",
+                "rank",
+                "alliance_role_id",
+            ):
                 if col not in columns:
-                    conn.execute(f"ALTER TABLE stfc_players ADD COLUMN {col} TEXT"
-                                 if col in ("verification_status", "verified_at", "rank")
-                                 else f"ALTER TABLE stfc_players ADD COLUMN {col} INTEGER")
+                    conn.execute(
+                        f"ALTER TABLE stfc_players ADD COLUMN {col} TEXT"
+                        if col in ("verification_status", "verified_at", "rank")
+                        else f"ALTER TABLE stfc_players ADD COLUMN {col} INTEGER"
+                    )
 
             cursor = conn.execute("PRAGMA table_info(guild_configs)")
             guild_columns = {row[1] for row in cursor.fetchall()}
             if "session_ttl_hours" not in guild_columns:
-                conn.execute("ALTER TABLE guild_configs ADD COLUMN session_ttl_hours INTEGER DEFAULT 168")
+                conn.execute(
+                    "ALTER TABLE guild_configs ADD COLUMN session_ttl_hours INTEGER DEFAULT 168"
+                )
 
             cursor = conn.execute("PRAGMA table_info(wizard_sessions)")
             wizard_columns = {row[1] for row in cursor.fetchall()}
             if "player_data_json" not in wizard_columns:
-                conn.execute("ALTER TABLE wizard_sessions ADD COLUMN player_data_json TEXT")
+                conn.execute(
+                    "ALTER TABLE wizard_sessions ADD COLUMN player_data_json TEXT"
+                )
             if "guild_id" not in wizard_columns:
                 conn.execute("ALTER TABLE wizard_sessions ADD COLUMN guild_id INTEGER")
 
@@ -161,7 +171,7 @@ class ProfileStore:
             """)
             conn.commit()
 
-    def get_guild_config(self, guild_id: int) -> Optional[GuildConfig]:
+    def get_guild_config(self, guild_id: int) -> GuildConfig | None:
         self._bust_stale_cache()
         if guild_id in self._guild_config_cache:
             return self._guild_config_cache[guild_id]
@@ -271,13 +281,17 @@ class ProfileStore:
                     update_check_hours=row[13] if row[13] is not None else 24,
                     session_ttl_hours=row[14] if row[14] is not None else 168,
                     require_screenshot=bool(row[15]) if row[15] is not None else True,
-                    manage_alliance_roles=bool(row[16]) if row[16] is not None else False,
+                    manage_alliance_roles=bool(row[16])
+                    if row[16] is not None
+                    else False,
                 )
                 self._guild_config_cache[config.guild_id] = config
                 configs.append(config)
             return configs
 
-    def is_player_id_taken(self, player_id: str, exclude_user_id: int = None) -> bool:
+    def is_player_id_taken(
+        self, player_id: str, exclude_user_id: int | None = None
+    ) -> bool:
         with sqlite3.connect(self.path) as conn:
             if exclude_user_id is not None:
                 cursor = conn.execute(
@@ -291,13 +305,18 @@ class ProfileStore:
                 )
             return cursor.fetchone() is not None
 
-    def save_pending_wizard_view(self, message_id: int, channel_id: int, user_id: int, view_type: str):
+    def save_pending_wizard_view(
+        self, message_id: int, channel_id: int, user_id: int, view_type: str
+    ):
         with sqlite3.connect(self.path) as conn:
-            conn.execute("""
+            conn.execute(
+                """
                 INSERT OR REPLACE INTO pending_wizard_views
                 (message_id, channel_id, user_id, view_type)
                 VALUES (?, ?, ?, ?)
-            """, (message_id, channel_id, user_id, view_type))
+            """,
+                (message_id, channel_id, user_id, view_type),
+            )
             conn.commit()
 
     def get_all_pending_wizard_views(self) -> list[dict]:
@@ -305,16 +324,21 @@ class ProfileStore:
             cursor = conn.execute(
                 "SELECT message_id, channel_id, user_id, view_type FROM pending_wizard_views"
             )
-            return [{
-                "message_id": row[0],
-                "channel_id": row[1],
-                "user_id": row[2],
-                "view_type": row[3],
-            } for row in cursor.fetchall()]
+            return [
+                {
+                    "message_id": row[0],
+                    "channel_id": row[1],
+                    "user_id": row[2],
+                    "view_type": row[3],
+                }
+                for row in cursor.fetchall()
+            ]
 
     def delete_pending_wizard_view(self, message_id: int):
         with sqlite3.connect(self.path) as conn:
-            conn.execute("DELETE FROM pending_wizard_views WHERE message_id = ?", (message_id,))
+            conn.execute(
+                "DELETE FROM pending_wizard_views WHERE message_id = ?", (message_id,)
+            )
             conn.commit()
 
     def get_pending_wizard_views_by_user(self, user_id: int) -> list[dict]:
@@ -323,27 +347,50 @@ class ProfileStore:
                 "SELECT message_id, channel_id, user_id, view_type FROM pending_wizard_views WHERE user_id = ?",
                 (user_id,),
             )
-            return [{
-                "message_id": row[0],
-                "channel_id": row[1],
-                "user_id": row[2],
-                "view_type": row[3],
-            } for row in cursor.fetchall()]
+            return [
+                {
+                    "message_id": row[0],
+                    "channel_id": row[1],
+                    "user_id": row[2],
+                    "view_type": row[3],
+                }
+                for row in cursor.fetchall()
+            ]
 
     def delete_pending_wizard_views_by_user(self, user_id: int):
         with sqlite3.connect(self.path) as conn:
-            conn.execute("DELETE FROM pending_wizard_views WHERE user_id = ?", (user_id,))
+            conn.execute(
+                "DELETE FROM pending_wizard_views WHERE user_id = ?", (user_id,)
+            )
             conn.commit()
 
-    def save_pending_rank_confirmation(self, message_id: int, channel_id: int, user_id: int,
-                                       member_name: str, rank: str, player_name: str,
-                                       alliance_tag: str):
+    def save_pending_rank_confirmation(
+        self,
+        message_id: int,
+        channel_id: int,
+        user_id: int,
+        member_name: str,
+        rank: str,
+        player_name: str,
+        alliance_tag: str,
+    ):
         with sqlite3.connect(self.path) as conn:
-            conn.execute("""
+            conn.execute(
+                """
                 INSERT OR REPLACE INTO pending_rank_confirmations
                 (message_id, channel_id, user_id, member_name, rank, player_name, alliance_tag)
                 VALUES (?, ?, ?, ?, ?, ?, ?)
-            """, (message_id, channel_id, user_id, member_name, rank, player_name, alliance_tag))
+            """,
+                (
+                    message_id,
+                    channel_id,
+                    user_id,
+                    member_name,
+                    rank,
+                    player_name,
+                    alliance_tag,
+                ),
+            )
             conn.commit()
 
     def get_all_pending_rank_confirmations(self) -> list[dict]:
@@ -352,19 +399,25 @@ class ProfileStore:
                 "SELECT message_id, channel_id, user_id, member_name, rank, player_name, alliance_tag "
                 "FROM pending_rank_confirmations"
             )
-            return [{
-                "message_id": row[0],
-                "channel_id": row[1],
-                "user_id": row[2],
-                "member_name": row[3],
-                "rank": row[4],
-                "player_name": row[5],
-                "alliance_tag": row[6],
-            } for row in cursor.fetchall()]
+            return [
+                {
+                    "message_id": row[0],
+                    "channel_id": row[1],
+                    "user_id": row[2],
+                    "member_name": row[3],
+                    "rank": row[4],
+                    "player_name": row[5],
+                    "alliance_tag": row[6],
+                }
+                for row in cursor.fetchall()
+            ]
 
     def delete_pending_rank_confirmation(self, message_id: int):
         with sqlite3.connect(self.path) as conn:
-            conn.execute("DELETE FROM pending_rank_confirmations WHERE message_id = ?", (message_id,))
+            conn.execute(
+                "DELETE FROM pending_rank_confirmations WHERE message_id = ?",
+                (message_id,),
+            )
             conn.commit()
 
     def store_stfc_player(
@@ -374,30 +427,36 @@ class ProfileStore:
         player_data: "PlayerData",
     ):
         with sqlite3.connect(self.path) as conn:
-            cursor = conn.execute("SELECT 1 FROM stfc_players WHERE user_id = ?", (user_id,))
+            cursor = conn.execute(
+                "SELECT 1 FROM stfc_players WHERE user_id = ?", (user_id,)
+            )
             exists = cursor.fetchone() is not None
 
             if exists:
                 old = conn.execute(
-                    "SELECT alliance_role_id FROM stfc_players WHERE user_id = ?", (user_id,)
+                    "SELECT alliance_role_id FROM stfc_players WHERE user_id = ?",
+                    (user_id,),
                 ).fetchone()
                 old_role_id = old[0] if old else None
 
-                conn.execute("""
+                conn.execute(
+                    """
                     UPDATE stfc_players
                     SET stfc_link = ?, player_id = ?, username = ?, level = ?, server = ?,
                         alliance_tag = ?, rank = ?, last_updated = CURRENT_TIMESTAMP
                     WHERE user_id = ?
-                """, (
-                    stfc_link,
-                    player_data.player_id,
-                    player_data.username,
-                    player_data.level,
-                    player_data.server,
-                    player_data.alliance_tag,
-                    getattr(player_data, "rank", None),
-                    user_id,
-                ))
+                """,
+                    (
+                        stfc_link,
+                        player_data.player_id,
+                        player_data.username,
+                        player_data.level,
+                        player_data.server,
+                        player_data.alliance_tag,
+                        getattr(player_data, "rank", None),
+                        user_id,
+                    ),
+                )
 
                 if old_role_id is not None:
                     conn.execute(
@@ -405,20 +464,23 @@ class ProfileStore:
                         (old_role_id, user_id),
                     )
             else:
-                conn.execute("""
+                conn.execute(
+                    """
                     INSERT INTO stfc_players
                     (user_id, stfc_link, player_id, username, level, server, alliance_tag, rank, last_updated)
                     VALUES (?, ?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP)
-                """, (
-                    user_id,
-                    stfc_link,
-                    player_data.player_id,
-                    player_data.username,
-                    player_data.level,
-                    player_data.server,
-                    player_data.alliance_tag,
-                    getattr(player_data, "rank", None),
-                ))
+                """,
+                    (
+                        user_id,
+                        stfc_link,
+                        player_data.player_id,
+                        player_data.username,
+                        player_data.level,
+                        player_data.server,
+                        player_data.alliance_tag,
+                        getattr(player_data, "rank", None),
+                    ),
+                )
             conn.commit()
 
     def get_all_players(self) -> list[tuple]:
@@ -428,7 +490,7 @@ class ProfileStore:
             )
             return cursor.fetchall()
 
-    def get_player_data(self, user_id: int) -> Optional[tuple]:
+    def get_player_data(self, user_id: int) -> tuple | None:
         with sqlite3.connect(self.path) as conn:
             cursor = conn.execute(
                 "SELECT username, level, server, alliance_tag, rank FROM stfc_players WHERE user_id = ?",
@@ -449,7 +511,13 @@ class ProfileStore:
             conn.execute("DELETE FROM stfc_players WHERE user_id = ?", (user_id,))
             conn.commit()
 
-    def log_verification_action(self, user_id: int, action: str, admin_id: int = None, reason: str = None):
+    def log_verification_action(
+        self,
+        user_id: int,
+        action: str,
+        admin_id: int | None = None,
+        reason: str | None = None,
+    ):
         with sqlite3.connect(self.path) as conn:
             conn.execute(
                 """INSERT INTO verification_logs (user_id, action, admin_id, reason)
@@ -458,9 +526,10 @@ class ProfileStore:
             )
             conn.commit()
 
-    def create_wizard_session(self, user_id: int, guild_id: Optional[int] = None,
-                              ttl_hours: int = 168):
-        expires_at = (datetime.now() + timedelta(hours=ttl_hours)).isoformat()
+    def create_wizard_session(
+        self, user_id: int, guild_id: int | None = None, ttl_hours: int = 168
+    ):
+        expires_at = (datetime.now(UTC) + timedelta(hours=ttl_hours)).isoformat()
         with sqlite3.connect(self.path) as conn:
             conn.execute(
                 """INSERT OR REPLACE INTO wizard_sessions (user_id, guild_id, step, created_at, expires_at)
@@ -469,7 +538,7 @@ class ProfileStore:
             )
             conn.commit()
 
-    def get_wizard_session(self, user_id: int) -> Optional[dict]:
+    def get_wizard_session(self, user_id: int) -> dict | None:
         with sqlite3.connect(self.path) as conn:
             cursor = conn.execute(
                 """SELECT user_id, step, stfc_link, screenshot_data, created_at, expires_at, player_data_json, guild_id
@@ -480,8 +549,12 @@ class ProfileStore:
             if not row:
                 return None
             expires_at = datetime.fromisoformat(row[5])
-            if datetime.now() > expires_at:
-                conn.execute("DELETE FROM wizard_sessions WHERE user_id = ?", (user_id,))
+            if expires_at.tzinfo is None:
+                expires_at = expires_at.replace(tzinfo=UTC)
+            if datetime.now(UTC) > expires_at:
+                conn.execute(
+                    "DELETE FROM wizard_sessions WHERE user_id = ?", (user_id,)
+                )
                 conn.commit()
                 return None
             return {
@@ -495,8 +568,14 @@ class ProfileStore:
                 "guild_id": row[7],
             }
 
-    def update_wizard_session(self, user_id: int, step: int = None, stfc_link: str = None,
-                               screenshot_data: str = None, player_data_json: str = None):
+    def update_wizard_session(
+        self,
+        user_id: int,
+        step: int | None = None,
+        stfc_link: str | None = None,
+        screenshot_data: str | None = None,
+        player_data_json: str | None = None,
+    ):
         updates = []
         params = []
         if step is not None:
@@ -536,7 +615,7 @@ class ProfileStore:
             conn.execute("DELETE FROM wizard_sessions WHERE user_id = ?", (user_id,))
             conn.commit()
 
-    def get_user_alliance_role_id(self, user_id: int) -> Optional[int]:
+    def get_user_alliance_role_id(self, user_id: int) -> int | None:
         with sqlite3.connect(self.path) as conn:
             row = conn.execute(
                 "SELECT alliance_role_id FROM stfc_players WHERE user_id = ?",
@@ -544,7 +623,7 @@ class ProfileStore:
             ).fetchone()
             return row[0] if row else None
 
-    def update_user_alliance_role_id(self, user_id: int, alliance_role_id: Optional[int]):
+    def update_user_alliance_role_id(self, user_id: int, alliance_role_id: int | None):
         with sqlite3.connect(self.path) as conn:
             conn.execute(
                 "UPDATE stfc_players SET alliance_role_id = ? WHERE user_id = ?",
@@ -552,7 +631,7 @@ class ProfileStore:
             )
             conn.commit()
 
-    def get_user_full_data(self, user_id: int) -> Optional[tuple]:
+    def get_user_full_data(self, user_id: int) -> tuple | None:
         with sqlite3.connect(self.path) as conn:
             return conn.execute(
                 "SELECT username, level, server, alliance_tag, rank, alliance_role_id FROM stfc_players WHERE user_id = ?",

@@ -54,7 +54,9 @@ class VerificationCog(commands.Cog):
                 else "Open a support ticket using the support process configured by your admins."
             )
             await interaction.followup.send(
-                _t.t(locale, "verification.already_verified", support_ticket=ticket_text),
+                _t.t(
+                    locale, "verification.already_verified", support_ticket=ticket_text
+                ),
                 ephemeral=True,
             )
             log.info(
@@ -95,7 +97,9 @@ class VerificationCog(commands.Cog):
                     locale=interaction.locale,
                 ),
             )
-            store.save_pending_wizard_view(msg.id, msg.channel.id, interaction.user.id, "StartWizardView")
+            store.save_pending_wizard_view(
+                msg.id, msg.channel.id, interaction.user.id, "StartWizardView"
+            )
             await interaction.followup.send(
                 _t.t(locale, "verification.dm_sent"),
                 ephemeral=True,
@@ -108,7 +112,9 @@ class VerificationCog(commands.Cog):
                 _t.t(locale, "verification.dm_failed"),
                 ephemeral=True,
             )
-            log.warning(f"[WIZARD] Could not send DM to {interaction.user.id} (DMs disabled)")
+            log.warning(
+                f"[WIZARD] Could not send DM to {interaction.user.id} (DMs disabled)"
+            )
 
 
 async def setup(bot: commands.Bot):

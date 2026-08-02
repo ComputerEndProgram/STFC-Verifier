@@ -1,2 +1,1 @@
 """STFC Verifier bot package."""
-

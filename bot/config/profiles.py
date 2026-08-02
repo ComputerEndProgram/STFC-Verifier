@@ -18,4 +18,3 @@ def get_profile(profile_name: str) -> VerificationProfile:
             f"Unknown BOT_PROFILE '{profile_name}'. Expected one of: {valid}"
         )
     return profile
-

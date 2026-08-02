@@ -1,2 +1,1 @@
 """Veil security profile."""
-

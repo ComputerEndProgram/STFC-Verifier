@@ -1,2 +1,1 @@
 """STFC verifier profile."""
-
