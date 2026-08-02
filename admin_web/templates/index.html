@@ -5,23 +5,28 @@
     <div class="lcars-text-bar lcars-text-bar--a6">Directory</div>
     <div class="lcars-section-body">
       <p>
-        No accessible servers. Invite the bot and make sure it is in a server where
-        you have Manage Server / Administrator permission.
+        No servers found where you have Manage Server / Administrator permission.
       </p>
     </div>
   </section>
 {% else %}
   <section class="lcars-section">
-    <div class="lcars-text-bar lcars-text-bar--a5">Accessible · {{ guilds | length }}</div>
+    <div class="lcars-text-bar lcars-text-bar--a5">Manageable · {{ guilds | length }}</div>
     <div class="lcars-section-body">
       <ul class="guild-list">
         {% for guild in guilds %}
           <li>
-            <a class="guild-link" href="/guilds/{{ guild.id }}">
+            {% if guild.bot_present %}
+              <a class="guild-link" href="/guilds/{{ guild.id }}">
+            {% else %}
+              <a class="guild-link guild-link--absent" href="{{ invite_url }}" target="_blank" rel="noopener">
+            {% endif %}
               <span class="guild-link-body">
                 <strong>{{ guild.name }}</strong>
                 <span class="muted">
-                  {% if guild.configured %}
+                  {% if not guild.bot_present %}
+                    Bot not in this server — click to add it
+                  {% elif guild.configured %}
                     {{ guild.profile }} · configured
                   {% else %}
                     Not configured

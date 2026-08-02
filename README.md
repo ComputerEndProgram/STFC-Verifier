@@ -85,7 +85,7 @@ The admin web UI is the **only** way to configure a guild's settings. It runs em
 
 ### Access control
 
-Anyone can log in, but only users with **Manage Server** (or **Administrator**) permission in a guild — plus the bot and the user being members of that guild — can view or edit that guild's config. Permissions are re-checked against Discord on every page load and save.
+Anyone can log in, but the guild picker only lists servers where the user has **Manage Server** (or **Administrator**) permission. Servers the bot isn't a member of yet show an invite link so the bot can be added with the required permissions. Viewing or editing a guild's config additionally requires the bot to be a member of that guild. Permissions are re-checked against Discord on every page load and save.
 
 ## Commands
 

@@ -13,6 +13,11 @@ CDN_BASE = "https://cdn.discordapp.com"
 ADMINISTRATOR = 1 << 3
 MANAGE_GUILD = 1 << 5
 
+# Permission bits the bot needs to run verification (roles, nicknames,
+# messages, embeds, attachments, message history).
+BOT_PERMISSIONS = 402769920
+BOT_OAUTH_SCOPE = "bot applications.commands"
+
 TRANSIENT_STATUSES = {429, 500, 502, 503, 504}
 
 
@@ -102,6 +107,17 @@ class DiscordAPI:
                 "response_type": "code",
                 "scope": self.scopes,
                 "state": state,
+            }
+        )
+        return f"{OAUTH_AUTHORIZE_URL}?{params}"
+
+    def bot_invite_url(self) -> str:
+        """OAuth2 URL to invite the bot into a server."""
+        params = urlencode(
+            {
+                "client_id": self.client_id,
+                "permissions": BOT_PERMISSIONS,
+                "scope": BOT_OAUTH_SCOPE,
             }
         )
         return f"{OAUTH_AUTHORIZE_URL}?{params}"

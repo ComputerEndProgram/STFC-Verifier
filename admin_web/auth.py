@@ -138,37 +138,36 @@ class AdminContext:
     async def accessible_guilds(
         self, request: Request, session: AdminSession
     ) -> list[dict]:
-        """Guilds where the user can manage AND the bot is present.
+        """Guilds where the user has Manage Server / Administrator permission.
 
-        The user's membership and permissions are re-fetched from Discord on
-        every request — never trusted from a login-time snapshot.
+        Includes guilds the bot is not a member of yet, so the web UI can
+        offer an invite link. The user's membership and permissions are
+        re-fetched from Discord on every request — never trusted from a
+        login-time snapshot.
         """
         user_guilds = await self._user_guilds(request, session)
+        return [
+            guild
+            for guild in user_guilds
+            if has_manage_guild(
+                int(guild.get("permissions") or 0), bool(guild.get("owner"))
+            )
+        ]
+
+    async def bot_guild_ids(self, request: Request) -> set[int]:
+        """Guild IDs the bot is a member of, fetched fresh."""
         try:
-            bot_ids = await self.discord.get_bot_guild_ids()
+            return await self.discord.get_bot_guild_ids()
         except DiscordAPIError as exc:
             raise AccessDenied(
                 "Could not verify the bot's server membership — try again later."
             ) from exc
-        return [
-            guild
-            for guild in user_guilds
-            if int(guild["id"]) in bot_ids
-            and has_manage_guild(
-                int(guild.get("permissions") or 0), bool(guild.get("owner"))
-            )
-        ]
 
     async def require_guild(self, request: Request, guild_id: int) -> dict:
         """Server-side permission gate for a single guild, checked per request."""
         session = self.require_login(request)
         user_guilds = await self._user_guilds(request, session)
-        try:
-            bot_ids = await self.discord.get_bot_guild_ids()
-        except DiscordAPIError as exc:
-            raise AccessDenied(
-                "Could not verify the bot's server membership — try again later."
-            ) from exc
+        bot_ids = await self.bot_guild_ids(request)
 
         guild = next((g for g in user_guilds if int(g["id"]) == guild_id), None)
         if guild is None:

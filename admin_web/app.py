@@ -273,7 +273,9 @@ async def guild_picker(request: Request):
     ctx = _ctx(request)
     session = ctx.require_login(request)
     guilds = await ctx.accessible_guilds(request, session)
+    bot_ids = await ctx.bot_guild_ids(request)
     configs = {config.guild_id: config for config in ctx.store.get_all_guild_configs()}
+    invite_url = ctx.discord.bot_invite_url()
 
     rows = []
     for guild in guilds:
@@ -286,6 +288,7 @@ async def guild_picker(request: Request):
                 "icon": guild_icon_url(guild),
                 "profile": _profile_label(config.bot_profile) if config else None,
                 "configured": config is not None,
+                "bot_present": gid in bot_ids,
             }
         )
     rows.sort(key=lambda r: r["name"].lower())
@@ -301,6 +304,7 @@ async def guild_picker(request: Request):
         actions=_logout_actions(),
         guilds=rows,
         user=session.user,
+        invite_url=invite_url,
     )
 
 

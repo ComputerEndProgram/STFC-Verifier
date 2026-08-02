@@ -85,14 +85,24 @@ def _standard_world(client):
     return _login(client)
 
 
-def test_guild_picker_lists_only_accessible(client):
+def test_guild_picker_lists_all_manageable_guilds(client):
     _standard_world(client)
     res = client.get("/app")
     assert res.status_code == 200
     assert "Alpha" in res.text
     assert "Not configured" in res.text
-    assert "Beta" not in res.text
-    assert "Gamma" not in res.text
+    assert "Gamma" in res.text  # manageable even without the bot
+    assert "Beta" not in res.text  # no Manage Server permission
+
+
+def test_guild_picker_offers_invite_when_bot_absent(client):
+    _standard_world(client)
+    res = client.get("/app")
+    assert "/oauth2/authorize" in res.text
+    assert "client_id=12345" in res.text
+    assert "permissions=402769920" in res.text
+    assert "Bot not in this server" in res.text
+    assert 'href="/guilds/111"' in res.text  # bot present -> config page
 
 
 def test_guild_page_renders_config_and_form(client):

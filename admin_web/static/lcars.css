@@ -665,6 +665,14 @@ h2 {
 	background: var(--lcars-a5);
 }
 
+.guild-link--absent::before {
+	background: var(--lcars-alert);
+}
+
+.guild-link--absent:hover::before {
+	background: var(--lcars-alert);
+}
+
 .guild-link strong {
 	font-size: 1.05rem;
 	letter-spacing: 0.04em;
