@@ -115,7 +115,7 @@ async def test_stfc_verifier_assign_roles_manage_alliance_true() -> None:
     assert confirmation_view is None
     assert any("Base role assigned" in f for f in feedback)
     assert any("Alliance role assigned" in f for f in feedback)
-    bot.store.update_user_alliance_role_id.assert_called_with(1001, 99)
+    bot.store.update_user_alliance_role_id.assert_called_with(1, 1001, 99)
 
 
 @pytest.mark.anyio

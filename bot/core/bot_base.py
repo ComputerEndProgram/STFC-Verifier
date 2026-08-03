@@ -476,7 +476,7 @@ class BaseBot(commands.Bot):
             )
             return
 
-        if self.store.is_player_id_taken(player_id, exclude_user_id=user_id):
+        if self.store.is_player_id_taken(guild_id, player_id, exclude_user_id=user_id):
             await interaction.followup.send(
                 self._t.t(None, "verification.player_id_taken"),
                 ephemeral=True,
@@ -508,7 +508,7 @@ class BaseBot(commands.Bot):
             feedback.append(self._t.t(None, "wizard.nickname_error", error=e))
             log.error(f"[WIZARD] Error setting nickname for {member.id}: {e}")
 
-        self.store.store_stfc_player(member.id, player_link, player_data)
+        self.store.store_stfc_player(guild_id, member.id, player_link, player_data)
         self.store.delete_pending_wizard_views_by_user(member.id)
 
         role_feedback, confirmation_view = await profile.assign_roles(
@@ -516,7 +516,7 @@ class BaseBot(commands.Bot):
         )
         feedback.extend(role_feedback)
 
-        self.store.mark_verified(member.id)
+        self.store.mark_verified(guild_id, member.id)
         self.store.log_verification_action(member.id, "verified")
         feedback.append(self._t.t(None, "wizard.player_data_stored"))
 
@@ -680,8 +680,8 @@ class BaseBot(commands.Bot):
         config = self.get_guild_config(member.guild.id)
         if not config:
             return
-        if self.store.get_player_data(member.id):
-            self.store.delete_verification(member.id)
+        if self.store.get_player_data(member.guild.id, member.id):
+            self.store.delete_verification(member.guild.id, member.id)
             self.store.log_verification_action(
                 member.id, "removed", None, "User left the server"
             )
@@ -695,11 +695,6 @@ class BaseBot(commands.Bot):
         if not configs:
             return
 
-        players = self.store.get_all_players()
-        if not players:
-            log.info("[UPDATE] No players to check")
-            return
-
         now = datetime.now(UTC)
         log.info("[UPDATE] Starting periodic player update check")
 
@@ -711,6 +706,14 @@ class BaseBot(commands.Bot):
 
             guild = self.get_guild(config.guild_id)
             if not guild:
+                continue
+
+            players = self.store.get_all_players(config.guild_id)
+            if not players:
+                log.info(
+                    f"[UPDATE] No players to check for guild {config.guild_id}"
+                )
+                self._last_update_check[config.guild_id] = now
                 continue
 
             profile = get_profile(config.bot_profile)

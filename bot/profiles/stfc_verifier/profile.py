@@ -219,7 +219,7 @@ class STFCVerifierProfile(VerificationProfile):
                             f"✅ Alliance role assigned: `{alliance_role.name}`"
                         )
                         bot.store.update_user_alliance_role_id(
-                            member.id, alliance_role.id
+                            config.guild_id, member.id, alliance_role.id
                         )
                         log.info(
                             f"[WIZARD] Assigned alliance role {alliance_role.name} to {member.id}"
@@ -235,7 +235,9 @@ class STFCVerifierProfile(VerificationProfile):
                     try:
                         await member.add_roles(na_role, reason="No alliance")
                         feedback.append(f"✅ Alliance role assigned: `{na_role.name}`")
-                        bot.store.update_user_alliance_role_id(member.id, na_role.id)
+                        bot.store.update_user_alliance_role_id(
+                            config.guild_id, member.id, na_role.id
+                        )
                         log.info(f"[WIZARD] Assigned N/A role to {member.id}")
                     except Exception as e:
                         feedback.append(f"⚠️ Error assigning N/A role: {e}")
@@ -298,7 +300,7 @@ class STFCVerifierProfile(VerificationProfile):
         player_data,
         config: GuildConfig,
     ) -> None:
-        old_data = bot.store.get_user_full_data(user_id)
+        old_data = bot.store.get_user_full_data(config.guild_id, user_id)
         if not old_data:
             return
 
@@ -375,7 +377,9 @@ class STFCVerifierProfile(VerificationProfile):
                         log.info(
                             f"[UPDATE] Assigned alliance role {new_role.name} to {member.id}"
                         )
-                        bot.store.update_user_alliance_role_id(user_id, new_role.id)
+                        bot.store.update_user_alliance_role_id(
+                            config.guild_id, user_id, new_role.id
+                        )
                     except Exception as e:
                         log.warning(
                             f"[UPDATE] Error assigning new alliance role to {member.id}: {e}"
@@ -439,4 +443,4 @@ class STFCVerifierProfile(VerificationProfile):
                     player_data.alliance_tag or "N/A",
                 )
 
-        bot.store.store_stfc_player(user_id, stfc_link, player_data)
+        bot.store.store_stfc_player(config.guild_id, user_id, stfc_link, player_data)

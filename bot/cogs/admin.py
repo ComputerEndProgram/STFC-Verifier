@@ -52,19 +52,22 @@ class AdminCog(commands.Cog):
         reason: str = "No reason provided",
     ):
         if not interaction.guild or not isinstance(interaction.user, discord.Member):
-            return await interaction.response.send_message(
+            await interaction.response.defer(ephemeral=True)
+            return await interaction.followup.send(
                 "❌ Could not verify your permissions.",
                 ephemeral=True,
             )
 
+        await interaction.response.defer(thinking=True)
+
         config = self.bot.get_guild_config(interaction.guild.id)
         if not config:
             if interaction.user.guild_permissions.manage_guild:
-                return await interaction.response.send_message(
+                return await interaction.followup.send(
                     "⚠️ This server is not configured yet. Please configure it in the admin web UI.",
                     ephemeral=True,
                 )
-            return await interaction.response.send_message(
+            return await interaction.followup.send(
                 "⚠️ The verification bot has not been configured for this server yet.",
                 ephemeral=True,
             )
@@ -82,14 +85,12 @@ class AdminCog(commands.Cog):
             admin_role and admin_role in interaction.user.roles
         ) or interaction.user.guild_permissions.administrator
         if not is_admin_user:
-            return await interaction.response.send_message(
+            return await interaction.followup.send(
                 "❌ You do not have permission to use this command.",
                 ephemeral=True,
             )
 
-        await interaction.response.defer(thinking=True)
-
-        player_data = store.get_player_data(user.id)
+        player_data = store.get_player_data(interaction.guild.id, user.id)
         if not player_data:
             return await interaction.followup.send(
                 f"❌ **{user.mention}** has not verified their STFC account yet.",
@@ -132,7 +133,7 @@ class AdminCog(commands.Cog):
                 if verify_role and verify_role in member.roles:
                     roles_to_remove.append(verify_role)
 
-            alliance_role_id = store.get_user_alliance_role_id(user.id)
+            alliance_role_id = store.get_user_alliance_role_id(interaction.guild.id, user.id)
             if alliance_role_id:
                 alliance_role = guild.get_role(alliance_role_id)
                 if alliance_role and alliance_role in member.roles:
@@ -154,7 +155,7 @@ class AdminCog(commands.Cog):
         except Exception as e:
             log.warning(f"[RECALL] Error removing roles from {member.id}: {e}")
 
-        store.delete_verification(user.id)
+        store.delete_verification(interaction.guild.id, user.id)
         store.log_verification_action(user.id, "recalled", interaction.user.id, reason)
 
         try:
@@ -297,7 +298,7 @@ class AdminCog(commands.Cog):
                 ephemeral=True,
             )
 
-        if store.is_player_id_taken(player_id, exclude_user_id=user.id):
+        if store.is_player_id_taken(interaction.guild.id, player_id, exclude_user_id=user.id):
             return await interaction.followup.send(
                 "❌ This STFC player account is already linked to another Discord user.",
                 ephemeral=True,
@@ -321,7 +322,7 @@ class AdminCog(commands.Cog):
             feedback.append(f"⚠️ Error setting nickname: {e}")
             log.error(f"[ADMIN] Error setting nickname for {member.id}: {e}")
 
-        store.store_stfc_player(member.id, player_url, player_data)
+        store.store_stfc_player(interaction.guild.id, member.id, player_url, player_data)
         store.delete_pending_wizard_views_by_user(member.id)
 
         try:
@@ -334,7 +335,7 @@ class AdminCog(commands.Cog):
             log.error(f"[ADMIN] Error assigning roles to {member.id}: {e}")
             confirmation_view = None
 
-        store.mark_verified(member.id)
+        store.mark_verified(interaction.guild.id, member.id)
         store.log_verification_action(
             member.id, "verified", interaction.user.id, "Manual admin verification"
         )
@@ -364,7 +365,9 @@ class AdminCog(commands.Cog):
                 "stfc_link": player_url,
                 "screenshot_data": None,
             }
-            embed = profile.build_log_embed(member, player_data, session)
+            embed = profile.build_log_embed(
+                member, player_data, session, self._t, interaction.locale
+            )
             embed.add_field(
                 name="Action",
                 value=f"Manual verification by {interaction.user.mention}",

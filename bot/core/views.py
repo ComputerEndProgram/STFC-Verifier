@@ -61,7 +61,7 @@ class ChannelStartView(discord.ui.View):
         t: Translator = bot._t
         locale = interaction.locale
 
-        if store.get_player_data(user.id):
+        if store.get_player_data(guild_id, user.id):
             await interaction.response.send_message(
                 t.t(
                     locale,
@@ -150,7 +150,7 @@ class StartWizardView(discord.ui.View):
         user_id = interaction.user.id
         locale = interaction.locale
 
-        if self._store.get_player_data(user_id):
+        if self._store.get_player_data(self.guild_id, user_id):
             await interaction.response.send_message(
                 self._t.t(
                     locale,

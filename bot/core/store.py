@@ -54,6 +54,56 @@ class ProfileStore:
             self._guild_config_cache.clear()
             self._cache_mtime = mtime
 
+    def _migrate_stfc_players_guild(self, conn) -> None:
+        """Rebuild stfc_players with a composite (guild_id, user_id) primary key.
+
+        Legacy rows have no guild association; they are backfilled to the
+        first configured guild (a best-effort guess). Affected members should
+        re-verify in any other guild.
+        """
+        default_guild = conn.execute(
+            "SELECT guild_id FROM guild_configs ORDER BY guild_id LIMIT 1"
+        ).fetchone()
+        default_guild = default_guild[0] if default_guild else 0
+
+        conn.execute("ALTER TABLE stfc_players RENAME TO stfc_players_old")
+        conn.execute(
+            """
+            CREATE TABLE stfc_players (
+                guild_id INTEGER NOT NULL,
+                user_id INTEGER NOT NULL,
+                stfc_link TEXT NOT NULL,
+                player_id TEXT NOT NULL,
+                username TEXT,
+                level INTEGER,
+                server INTEGER,
+                alliance_tag TEXT,
+                verification_status TEXT DEFAULT 'verified',
+                verified_at TIMESTAMP,
+                rank TEXT,
+                alliance_role_id INTEGER,
+                last_updated TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                PRIMARY KEY (guild_id, user_id)
+            )
+            """
+        )
+        conn.execute(
+            """
+            INSERT INTO stfc_players (
+                guild_id, user_id, stfc_link, player_id, username, level, server,
+                alliance_tag, verification_status, verified_at, rank,
+                alliance_role_id, last_updated
+            )
+            SELECT ?, user_id, stfc_link, player_id, username, level, server,
+                alliance_tag, verification_status, verified_at, rank,
+                alliance_role_id, last_updated
+            FROM stfc_players_old
+            """,
+            (default_guild,),
+        )
+        conn.execute("DROP TABLE stfc_players_old")
+        conn.commit()
+
     def _init_db(self):
         with sqlite3.connect(self.path) as conn:
             conn.execute("""
@@ -79,7 +129,8 @@ class ProfileStore:
             """)
             conn.execute("""
                 CREATE TABLE IF NOT EXISTS stfc_players (
-                    user_id INTEGER PRIMARY KEY,
+                    guild_id INTEGER NOT NULL,
+                    user_id INTEGER NOT NULL,
                     stfc_link TEXT NOT NULL,
                     player_id TEXT NOT NULL,
                     username TEXT,
@@ -90,7 +141,8 @@ class ProfileStore:
                     verified_at TIMESTAMP,
                     rank TEXT,
                     alliance_role_id INTEGER,
-                    last_updated TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+                    last_updated TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                    PRIMARY KEY (guild_id, user_id)
                 )
             """)
             conn.execute("""
@@ -132,6 +184,11 @@ class ProfileStore:
                         if col in ("verification_status", "verified_at", "rank")
                         else f"ALTER TABLE stfc_players ADD COLUMN {col} INTEGER"
                     )
+
+            cursor = conn.execute("PRAGMA table_info(stfc_players)")
+            player_columns = {row[1] for row in cursor.fetchall()}
+            if "guild_id" not in player_columns:
+                self._migrate_stfc_players_guild(conn)
 
             cursor = conn.execute("PRAGMA table_info(guild_configs)")
             guild_columns = {row[1] for row in cursor.fetchall()}
@@ -290,18 +347,18 @@ class ProfileStore:
             return configs
 
     def is_player_id_taken(
-        self, player_id: str, exclude_user_id: int | None = None
+        self, guild_id: int, player_id: str, exclude_user_id: int | None = None
     ) -> bool:
         with sqlite3.connect(self.path) as conn:
             if exclude_user_id is not None:
                 cursor = conn.execute(
-                    "SELECT 1 FROM stfc_players WHERE player_id = ? AND user_id != ?",
-                    (player_id, exclude_user_id),
+                    "SELECT 1 FROM stfc_players WHERE guild_id = ? AND player_id = ? AND user_id != ?",
+                    (guild_id, player_id, exclude_user_id),
                 )
             else:
                 cursor = conn.execute(
-                    "SELECT 1 FROM stfc_players WHERE player_id = ?",
-                    (player_id,),
+                    "SELECT 1 FROM stfc_players WHERE guild_id = ? AND player_id = ?",
+                    (guild_id, player_id),
                 )
             return cursor.fetchone() is not None
 
@@ -422,20 +479,22 @@ class ProfileStore:
 
     def store_stfc_player(
         self,
+        guild_id: int,
         user_id: int,
         stfc_link: str,
         player_data: "PlayerData",
     ):
         with sqlite3.connect(self.path) as conn:
             cursor = conn.execute(
-                "SELECT 1 FROM stfc_players WHERE user_id = ?", (user_id,)
+                "SELECT 1 FROM stfc_players WHERE guild_id = ? AND user_id = ?",
+                (guild_id, user_id),
             )
             exists = cursor.fetchone() is not None
 
             if exists:
                 old = conn.execute(
-                    "SELECT alliance_role_id FROM stfc_players WHERE user_id = ?",
-                    (user_id,),
+                    "SELECT alliance_role_id FROM stfc_players WHERE guild_id = ? AND user_id = ?",
+                    (guild_id, user_id),
                 ).fetchone()
                 old_role_id = old[0] if old else None
 
@@ -444,7 +503,7 @@ class ProfileStore:
                     UPDATE stfc_players
                     SET stfc_link = ?, player_id = ?, username = ?, level = ?, server = ?,
                         alliance_tag = ?, rank = ?, last_updated = CURRENT_TIMESTAMP
-                    WHERE user_id = ?
+                    WHERE guild_id = ? AND user_id = ?
                 """,
                     (
                         stfc_link,
@@ -454,23 +513,25 @@ class ProfileStore:
                         player_data.server,
                         player_data.alliance_tag,
                         getattr(player_data, "rank", None),
+                        guild_id,
                         user_id,
                     ),
                 )
 
                 if old_role_id is not None:
                     conn.execute(
-                        "UPDATE stfc_players SET alliance_role_id = ? WHERE user_id = ?",
-                        (old_role_id, user_id),
+                        "UPDATE stfc_players SET alliance_role_id = ? WHERE guild_id = ? AND user_id = ?",
+                        (old_role_id, guild_id, user_id),
                     )
             else:
                 conn.execute(
                     """
                     INSERT INTO stfc_players
-                    (user_id, stfc_link, player_id, username, level, server, alliance_tag, rank, last_updated)
-                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP)
+                    (guild_id, user_id, stfc_link, player_id, username, level, server, alliance_tag, rank, last_updated)
+                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP)
                 """,
                     (
+                        guild_id,
                         user_id,
                         stfc_link,
                         player_data.player_id,
@@ -483,32 +544,36 @@ class ProfileStore:
                 )
             conn.commit()
 
-    def get_all_players(self) -> list[tuple]:
+    def get_all_players(self, guild_id: int) -> list[tuple]:
         with sqlite3.connect(self.path) as conn:
             cursor = conn.execute(
-                "SELECT user_id, stfc_link, player_id FROM stfc_players"
+                "SELECT user_id, stfc_link, player_id FROM stfc_players WHERE guild_id = ?",
+                (guild_id,),
             )
             return cursor.fetchall()
 
-    def get_player_data(self, user_id: int) -> tuple | None:
+    def get_player_data(self, guild_id: int, user_id: int) -> tuple | None:
         with sqlite3.connect(self.path) as conn:
             cursor = conn.execute(
-                "SELECT username, level, server, alliance_tag, rank FROM stfc_players WHERE user_id = ?",
-                (user_id,),
+                "SELECT username, level, server, alliance_tag, rank FROM stfc_players WHERE guild_id = ? AND user_id = ?",
+                (guild_id, user_id),
             )
             return cursor.fetchone()
 
-    def mark_verified(self, user_id: int):
+    def mark_verified(self, guild_id: int, user_id: int):
         with sqlite3.connect(self.path) as conn:
             conn.execute(
-                "UPDATE stfc_players SET verification_status = 'verified', verified_at = CURRENT_TIMESTAMP WHERE user_id = ?",
-                (user_id,),
+                "UPDATE stfc_players SET verification_status = 'verified', verified_at = CURRENT_TIMESTAMP WHERE guild_id = ? AND user_id = ?",
+                (guild_id, user_id),
             )
             conn.commit()
 
-    def delete_verification(self, user_id: int):
+    def delete_verification(self, guild_id: int, user_id: int):
         with sqlite3.connect(self.path) as conn:
-            conn.execute("DELETE FROM stfc_players WHERE user_id = ?", (user_id,))
+            conn.execute(
+                "DELETE FROM stfc_players WHERE guild_id = ? AND user_id = ?",
+                (guild_id, user_id),
+            )
             conn.commit()
 
     def log_verification_action(
@@ -615,25 +680,27 @@ class ProfileStore:
             conn.execute("DELETE FROM wizard_sessions WHERE user_id = ?", (user_id,))
             conn.commit()
 
-    def get_user_alliance_role_id(self, user_id: int) -> int | None:
+    def get_user_alliance_role_id(self, guild_id: int, user_id: int) -> int | None:
         with sqlite3.connect(self.path) as conn:
             row = conn.execute(
-                "SELECT alliance_role_id FROM stfc_players WHERE user_id = ?",
-                (user_id,),
+                "SELECT alliance_role_id FROM stfc_players WHERE guild_id = ? AND user_id = ?",
+                (guild_id, user_id),
             ).fetchone()
             return row[0] if row else None
 
-    def update_user_alliance_role_id(self, user_id: int, alliance_role_id: int | None):
+    def update_user_alliance_role_id(
+        self, guild_id: int, user_id: int, alliance_role_id: int | None
+    ):
         with sqlite3.connect(self.path) as conn:
             conn.execute(
-                "UPDATE stfc_players SET alliance_role_id = ? WHERE user_id = ?",
-                (alliance_role_id, user_id),
+                "UPDATE stfc_players SET alliance_role_id = ? WHERE guild_id = ? AND user_id = ?",
+                (alliance_role_id, guild_id, user_id),
             )
             conn.commit()
 
-    def get_user_full_data(self, user_id: int) -> tuple | None:
+    def get_user_full_data(self, guild_id: int, user_id: int) -> tuple | None:
         with sqlite3.connect(self.path) as conn:
             return conn.execute(
-                "SELECT username, level, server, alliance_tag, rank, alliance_role_id FROM stfc_players WHERE user_id = ?",
-                (user_id,),
+                "SELECT username, level, server, alliance_tag, rank, alliance_role_id FROM stfc_players WHERE guild_id = ? AND user_id = ?",
+                (guild_id, user_id),
             ).fetchone()

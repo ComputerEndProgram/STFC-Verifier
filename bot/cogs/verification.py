@@ -46,7 +46,7 @@ class VerificationCog(commands.Cog):
         store = self.bot.store
         _t = self._t
 
-        if store.get_player_data(interaction.user.id):
+        if store.get_player_data(guild_id, interaction.user.id):
             support_id = config.support_channel_id
             ticket_text = (
                 f"Open a support ticket in <#{support_id}>."

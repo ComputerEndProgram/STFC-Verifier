@@ -170,7 +170,7 @@ class VeilSecurityProfile(VerificationProfile):
         player_data,
         config: GuildConfig,
     ) -> None:
-        old_data = bot.store.get_player_data(user_id)
+        old_data = bot.store.get_player_data(config.guild_id, user_id)
         old_level = old_data[1] if old_data else None
 
         new_nick = self.build_nickname(player_data)
@@ -214,4 +214,4 @@ class VeilSecurityProfile(VerificationProfile):
                             f"[UPDATE] Could not assign OPS role to {member.id}: {e}"
                         )
 
-        bot.store.store_stfc_player(user_id, stfc_link, player_data)
+        bot.store.store_stfc_player(config.guild_id, user_id, stfc_link, player_data)
