@@ -23,6 +23,7 @@ dependencies = [
 [project.optional-dependencies]
 dev = [
   "pytest>=8.2.0",
+  "httpx2>=2.9.0",
 ]
 
 [project.scripts]
@@ -42,6 +43,10 @@ include = ["bot*", "admin_web*"]
 [tool.pytest.ini_options]
 testpaths = ["tests"]
 pythonpath = ["."]
+filterwarnings = [
+  # discord.py still imports the removed-in-3.13 `audioop` stdlib module.
+  "ignore:'audioop' is deprecated:DeprecationWarning:discord.player",
+]
 
 [tool.ruff.lint]
 ignore = [

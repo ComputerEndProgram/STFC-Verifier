@@ -201,17 +201,37 @@ def test_channel_options_grouped_by_category_like_discord(client):
         guild_channels=[
             {"id": "112", "name": "general", "type": 0, "position": 0},
             {"id": "11", "name": "info", "type": 4, "position": 1},
-            {"id": "1110", "name": "mod-logs", "type": 0, "position": 0, "parent_id": "11"},
-            {"id": "1111", "name": "verify", "type": 0, "position": 1, "parent_id": "11"},
+            {
+                "id": "1110",
+                "name": "mod-logs",
+                "type": 0,
+                "position": 0,
+                "parent_id": "11",
+            },
+            {
+                "id": "1111",
+                "name": "verify",
+                "type": 0,
+                "position": 1,
+                "parent_id": "11",
+            },
             {"id": "13", "name": "misc", "type": 4, "position": 2},
-            {"id": "113", "name": "support", "type": 0, "position": 0, "parent_id": "13"},
+            {
+                "id": "113",
+                "name": "support",
+                "type": 0,
+                "position": 0,
+                "parent_id": "13",
+            },
         ],
     )
     _login(client)
     html = client.get("/guilds/111").text
     assert html.index('value="112"') < html.index('<optgroup label="info">')
     assert html.index('<optgroup label="info">') < html.index('<optgroup label="misc">')
-    assert html.index('value="1110"') < html.index('value="1111"')  # mod-logs before verify
+    assert html.index('value="1110"') < html.index(
+        'value="1111"'
+    )  # mod-logs before verify
     assert html.index('value="1111"') < html.index('value="113"')
 
 
