@@ -52,9 +52,6 @@
 <section class="lcars-section">
   <div class="lcars-text-bar lcars-text-bar--a1">Edit config</div>
   <div class="lcars-section-body">
-    <p class="muted tiny">
-      Changes apply to the running bot immediately — no restart required.
-    </p>
     <form class="form" method="post" action="/guilds/{{ guild_id }}/config">
       <input type="hidden" name="csrf_token" value="{{ csrf_token }}" />
       {% for group in groups %}
@@ -87,34 +84,40 @@
             {% elif f.kind == 'channel' %}
               <label>
                 {{ f.label }}
-                <input
-                  type="text"
-                  name="{{ f.name }}"
-                  list="channel_options"
-                  inputmode="numeric"
-                  pattern="[0-9]*"
-                  autocomplete="off"
-                  placeholder="search or paste an ID"
-                  value="{{ values[f.name] or '' }}"
-                />
+                {% set current = values[f.name]|string if values[f.name] else '' %}
+                {% set current_name = channel_names.get(current) %}
+                <select name="{{ f.name }}">
+                  <option value="">Choose a channel…</option>
+                  {% if current and not current_name %}
+                    <option value="{{ current }}" selected>#{{ current }} (not on this server)</option>
+                  {% endif %}
+                  {% for group in channel_groups %}
+                    {% if group.label %}<optgroup label="{{ group.label }}">{% endif %}
+                    {% for c in group.channels %}
+                      <option value="{{ c.id }}" {% if current == c.id %}selected{% endif %}>{{ c.name }}</option>
+                    {% endfor %}
+                    {% if group.label %}</optgroup>{% endif %}
+                  {% endfor %}
+                </select>
                 {% if f.note %}<span class="lcars-hint">{{ f.note }}</span>{% endif %}
-                {% for c in channels %}{% if values[f.name]|string == c.id %}<span class="lcars-hint">Currently: {{ c.name }}</span>{% endif %}{% endfor %}
+                {% if current_name %}<span class="lcars-hint">Currently: {{ current_name }}</span>{% endif %}
               </label>
             {% elif f.kind == 'role' %}
               <label>
                 {{ f.label }}
-                <input
-                  type="text"
-                  name="{{ f.name }}"
-                  list="role_options"
-                  inputmode="numeric"
-                  pattern="[0-9]*"
-                  autocomplete="off"
-                  placeholder="search or paste an ID"
-                  value="{{ values[f.name] or '' }}"
-                />
+                {% set current = values[f.name]|string if values[f.name] else '' %}
+                {% set current_name = role_names.get(current) %}
+                <select name="{{ f.name }}">
+                  <option value="">Choose a role…</option>
+                  {% if current and not current_name %}
+                    <option value="{{ current }}" selected>@{{ current }} (not on this server)</option>
+                  {% endif %}
+                  {% for r in roles %}
+                    <option value="{{ r.id }}" {% if current == r.id %}selected{% endif %}>{{ r.name }}</option>
+                  {% endfor %}
+                </select>
                 {% if f.note %}<span class="lcars-hint">{{ f.note }}</span>{% endif %}
-                {% for r in roles %}{% if values[f.name]|string == r.id %}<span class="lcars-hint">Currently: {{ r.name }}</span>{% endif %}{% endfor %}
+                {% if current_name %}<span class="lcars-hint">Currently: {{ current_name }}</span>{% endif %}
               </label>
             {% else %}
               <label>
@@ -134,12 +137,6 @@
           {% endfor %}
         </div>
       {% endfor %}
-      <datalist id="channel_options">
-        {% for c in channels %}<option value="{{ c.id }}">{{ c.name }}</option>{% endfor %}
-      </datalist>
-      <datalist id="role_options">
-        {% for r in roles %}<option value="{{ r.id }}">{{ r.name }}</option>{% endfor %}
-      </datalist>
       <button type="submit" class="lcars-pill">Save config</button>
     </form>
   </div>

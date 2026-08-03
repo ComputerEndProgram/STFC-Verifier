@@ -161,13 +161,58 @@ def test_channel_role_search_fields_populated(client):
     )
     _login(client)
     res = client.get("/guilds/111")
-    assert 'value="1111">#verify' in res.text
-    assert 'value="1113">#announce' in res.text
-    assert 'value="2222">@Member' in res.text
-    assert 'list="channel_options"' in res.text
-    assert 'list="role_options"' in res.text
-    assert "#General Voice" not in res.text  # voice channels excluded
+    assert 'name="verify_channel_id"' in res.text
+    assert 'value="1111" >#verify' in res.text
+    assert 'value="1113" >#announce' in res.text
+    assert 'value="2222" >@Member' in res.text
+    assert 'list="channel_options"' not in res.text  # channel field is a select now
+    assert 'list="role_options"' not in res.text  # role field is a select now
+    assert "General Voice" not in res.text  # voice channels excluded
     assert "@everyone" not in res.text  # @everyone excluded
+
+
+def test_role_options_sorted_highest_first_like_discord(client):
+    """Role dropdown mirrors the Discord role tab: highest position on top."""
+    _install_discord_mocks(
+        client,
+        [_guild(111, "Alpha", MANAGE_GUILD)],
+        bot_ids={111},
+        guild_channels=[],
+        guild_roles=[
+            {"id": "2222", "name": "Member", "position": 3},
+            {"id": "111", "name": "@everyone", "position": 0},
+            {"id": "3333", "name": "Admiral", "position": 10},
+            {"id": "4444", "name": "Admin", "position": 7},
+        ],
+    )
+    _login(client)
+    html = client.get("/guilds/111").text
+    assert html.index('value="3333"') < html.index('value="4444"')
+    assert html.index('value="4444"') < html.index('value="2222"')
+    assert "@everyone" not in html
+
+
+def test_channel_options_grouped_by_category_like_discord(client):
+    """Channel dropdown mirrors the server list: position order, children under their category."""
+    _install_discord_mocks(
+        client,
+        [_guild(111, "Alpha", MANAGE_GUILD)],
+        bot_ids={111},
+        guild_channels=[
+            {"id": "112", "name": "general", "type": 0, "position": 0},
+            {"id": "11", "name": "info", "type": 4, "position": 1},
+            {"id": "1110", "name": "mod-logs", "type": 0, "position": 0, "parent_id": "11"},
+            {"id": "1111", "name": "verify", "type": 0, "position": 1, "parent_id": "11"},
+            {"id": "13", "name": "misc", "type": 4, "position": 2},
+            {"id": "113", "name": "support", "type": 0, "position": 0, "parent_id": "13"},
+        ],
+    )
+    _login(client)
+    html = client.get("/guilds/111").text
+    assert html.index('value="112"') < html.index('<optgroup label="info">')
+    assert html.index('<optgroup label="info">') < html.index('<optgroup label="misc">')
+    assert html.index('value="1110"') < html.index('value="1111"')  # mod-logs before verify
+    assert html.index('value="1111"') < html.index('value="113"')
 
 
 def test_display_section_filtered_by_profile(client):

@@ -72,6 +72,31 @@ def _profile_label(name: str | None) -> str | None:
 
 
 TEXT_CHANNEL_TYPES = (0, 5)  # GUILD_TEXT, GUILD_ANNOUNCEMENT
+CATEGORY_TYPE = 4  # GUILD_CATEGORY
+
+
+def _order_channels_like_discord(channels: list[dict]) -> list[dict]:
+    """Order channels the way the Discord client renders the server list.
+
+    Top-level items (categories and channels without a parent) sort by
+    position; each category's children follow it, also sorted by position.
+    """
+    categories = {c["id"]: c for c in channels if c.get("type") == CATEGORY_TYPE}
+    children: dict[str, list[dict]] = {}
+    top_level: list[dict] = []
+    for c in channels:
+        if c.get("parent_id") in categories:
+            children.setdefault(c["parent_id"], []).append(c)
+        else:
+            top_level.append(c)
+    for group in children.values():
+        group.sort(key=lambda c: c.get("position", 0))
+    top_level.sort(key=lambda c: c.get("position", 0))
+    ordered: list[dict] = []
+    for item in top_level:
+        ordered.append(item)
+        ordered.extend(children.get(item["id"], ()))
+    return ordered
 
 
 async def _guild_lookup_options(
@@ -79,24 +104,43 @@ async def _guild_lookup_options(
 ) -> tuple[list[dict], list[dict]]:
     """Channels/roles of a guild the bot is in, for the form's search fields.
 
-    Falls back to empty lists on failure so the page still renders.
+    Channels are returned as groups mirroring the Discord server list (in
+    position order, children under their category). Falls back to empty lists
+    on failure so the page still renders.
     """
     try:
         channels = await ctx.discord.get_guild_channels(guild_id)
         roles = await ctx.discord.get_guild_roles(guild_id)
     except DiscordAPIError:
         return [], []
-    channel_options = [
-        {"id": c["id"], "name": f"#{c['name']}"}
-        for c in channels
-        if c.get("type") in TEXT_CHANNEL_TYPES
-    ]
+    ordered = _order_channels_like_discord(channels)
+    category_names = {
+        c["id"]: c["name"] for c in ordered if c.get("type") == CATEGORY_TYPE
+    }
+    channel_groups: list[dict] = []
+    current_label: str | None = None
+    current: list[dict] = []
+    for c in ordered:
+        if c.get("type") not in TEXT_CHANNEL_TYPES:
+            continue
+        label = category_names.get(c.get("parent_id"))
+        if label != current_label:
+            if current:
+                channel_groups.append({"label": current_label, "channels": current})
+            current_label = label
+            current = []
+        current.append({"id": c["id"], "name": f"#{c['name']}"})
+    if current:
+        channel_groups.append({"label": current_label, "channels": current})
     role_options = [
         {"id": r["id"], "name": f"@{r['name']}"}
-        for r in roles
-        if r["id"] != str(guild_id)  # skip @everyone
+        for r in sorted(
+            (r for r in roles if r["id"] != str(guild_id)),  # skip @everyone
+            key=lambda r: r.get("position", 0),
+            reverse=True,  # Discord role tab shows highest position first
+        )
     ]
-    return channel_options, role_options
+    return channel_groups, role_options
 
 
 def _render(
@@ -260,14 +304,6 @@ def _user_nav(session) -> tuple[list[dict], list[dict]]:
     )
 
 
-def _logout_actions() -> str:
-    return (
-        '<form method="post" action="/auth/logout" style="display:inline-flex">'
-        '<button type="submit" class="lcars-pill lcars-pill--ghost lcars-pill--sm">Log out</button>'
-        "</form>"
-    )
-
-
 @app.get("/app", response_class=HTMLResponse)
 async def guild_picker(request: Request):
     ctx = _ctx(request)
@@ -305,7 +341,6 @@ async def guild_picker(request: Request):
         eyebrow="Admin console",
         nav_top=nav_top,
         nav_bottom=nav_bottom,
-        actions=_logout_actions(),
         guilds=rows,
         configured_guilds=configured,
         unconfigured_guilds=unconfigured,
@@ -320,8 +355,10 @@ async def guild_page(request: Request, guild_id: int, saved: int = 0):
     session = ctx.require_login(request)
     guild = await ctx.require_guild(request, guild_id)
     config = ctx.store.get_guild_config(guild_id)
-    channels, roles = await _guild_lookup_options(ctx, guild_id)
-    channel_names = {c["id"]: c["name"] for c in channels}
+    channel_groups, roles = await _guild_lookup_options(ctx, guild_id)
+    channel_names = {
+        c["id"]: c["name"] for group in channel_groups for c in group["channels"]
+    }
     role_names = {r["id"]: r["name"] for r in roles}
 
     nav_top, nav_bottom = _user_nav(session)
@@ -340,14 +377,13 @@ async def guild_page(request: Request, guild_id: int, saved: int = 0):
         eyebrow="Guild configuration",
         nav_top=nav_top,
         nav_bottom=nav_bottom,
-        actions=_logout_actions(),
         guild_id=guild_id,
         guild_name=guild.get("name") or str(guild_id),
         config=config,
         values=config_to_values(config),
         groups=build_form_spec(),
         display_groups=build_form_spec(config.bot_profile if config else None),
-        channels=channels,
+        channel_groups=channel_groups,
         roles=roles,
         channel_names=channel_names,
         role_names=role_names,
@@ -372,8 +408,10 @@ async def guild_config_save(request: Request, guild_id: int):
         config = values_to_config(guild_id, form)
     except ConfigParseError as exc:
         config = ctx.store.get_guild_config(guild_id)
-        channels, roles = await _guild_lookup_options(ctx, guild_id)
-        channel_names = {c["id"]: c["name"] for c in channels}
+        channel_groups, roles = await _guild_lookup_options(ctx, guild_id)
+        channel_names = {
+            c["id"]: c["name"] for group in channel_groups for c in group["channels"]
+        }
         role_names = {r["id"]: r["name"] for r in roles}
         nav_top, nav_bottom = _user_nav(session)
         nav_bottom.insert(0, {"label": "Error", "color": "alert"})
@@ -384,14 +422,13 @@ async def guild_config_save(request: Request, guild_id: int):
             eyebrow="Guild configuration",
             nav_top=nav_top,
             nav_bottom=nav_bottom,
-            actions=_logout_actions(),
             guild_id=guild_id,
             guild_name=guild.get("name") or str(guild_id),
             config=config,
             values=form_to_values(form),
             groups=build_form_spec(),
             display_groups=build_form_spec(config.bot_profile if config else None),
-            channels=channels,
+            channel_groups=channel_groups,
             roles=roles,
             channel_names=channel_names,
             role_names=role_names,

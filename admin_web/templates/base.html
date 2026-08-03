@@ -23,28 +23,31 @@
                 <div class="lcars-nav-btn lcars-nav-btn--deco lcars-nav-btn--a{{ item.color }}">{{ item.label }}</div>
               {% endif %}
             {% endfor %}
-          </div>
-          <div class="lcars-sidebar-fill" aria-hidden="true"></div>
-          <div class="lcars-sidebar-deco" aria-hidden="true">
-            <div class="lcars-nav-btn lcars-nav-btn--deco">01-4409</div>
-            <div class="lcars-nav-btn lcars-nav-btn--deco">LCARS 24</div>
+            <div class="lcars-sidebar-deco" aria-hidden="true">
+              <div class="lcars-nav-btn lcars-nav-btn--deco">01-4409</div>
+              <div class="lcars-nav-btn lcars-nav-btn--deco">LCARS 24</div>
+            </div>
           </div>
         </aside>
 
-        <header class="lcars-header">
-          {% if eyebrow %}<p class="lcars-eyebrow">{{ eyebrow }}</p>{% endif %}
-          <div class="lcars-banner-row">
-            <h1 class="lcars-banner">{{ title }}</h1>
-            {% if actions %}<div class="lcars-banner-actions">{{ actions | safe }}</div>{% endif %}
+        <div class="lcars-topbar">
+          <div class="lcars-topbar-segs lcars-topbar-segs--left">
+            <span class="lcars-topbar-seg seg--cap-l"></span>
+            <span class="lcars-topbar-seg seg--a8"></span>
+            <span class="lcars-topbar-seg seg--a1"></span>
           </div>
-        </header>
-
-        <div class="lcars-topbar" aria-hidden="true">
-          <span class="lcars-bar lcars-bar--elbow"></span>
-          <span class="lcars-bar lcars-bar--gap1"></span>
-          <span class="lcars-bar lcars-bar--seg2"></span>
-          <span class="lcars-bar lcars-bar--seg3"></span>
-          <span class="lcars-bar lcars-bar--tail"></span>
+          <header class="lcars-header">
+            {% if eyebrow %}<p class="lcars-eyebrow">{{ eyebrow }}</p>{% endif %}
+            <div class="lcars-banner-row">
+              <h1 class="lcars-banner">{{ title }}</h1>
+              {% if actions %}<div class="lcars-banner-actions">{{ actions | safe }}</div>{% endif %}
+            </div>
+          </header>
+          <div class="lcars-topbar-segs lcars-topbar-segs--right">
+            <span class="lcars-topbar-seg seg--a5"></span>
+            <span class="lcars-topbar-seg seg--a1"></span>
+            <span class="lcars-topbar-seg seg--cap-r"></span>
+          </div>
         </div>
 
         <main class="lcars-main">

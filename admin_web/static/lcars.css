@@ -22,7 +22,7 @@
 	--lcars-frame-color: var(--lcars-a6);
 
 	--lfw: 12rem;
-	--bar-h: 1.6rem;
+	--bar-h: clamp(2.75rem, 6vw, 4.5rem);
 	--gap: 0.32rem;
 	--outer-r: 3.5rem;
 	--scoop: 2.5rem;
@@ -45,11 +45,11 @@
 }
 
 @media (max-width: 1100px) {
-	:root { --lfw: 10rem; --outer-r: 2.75rem; --scoop: 2rem; --bar-h: 1.4rem; }
+	:root { --lfw: 10rem; --outer-r: 2.75rem; }
 }
 
 @media (max-width: 900px) {
-	:root { --lfw: 8rem; --outer-r: 2rem; --scoop: 1.5rem; --bar-h: 1.2rem; }
+	:root { --lfw: 8rem; --outer-r: 2rem; }
 }
 
 * { box-sizing: border-box; }
@@ -73,39 +73,42 @@ a:hover { color: var(--lcars-a2); }
 /* —— Frame —— */
 
 .lcars-screen {
-	min-height: 100vh;
-	padding: 0.75rem 1.25rem 1.5rem 0.5rem;
+	height: 100vh;
+	height: 100dvh;
+	overflow: hidden;
+	padding: 0 1.25rem 1.5rem 0.5rem;
 	background: #000;
 	animation: lcars-fade-in 0.4s ease-out;
 }
 
 @media (max-width: 700px) {
-	.lcars-screen { padding: 0.75rem; }
+	.lcars-screen { padding: 0 0.75rem 0.75rem; }
 }
 
 /*
   Columns:  [ pillar --lfw ] [ content 1fr ]
-  Rows:     [ nav/title auto ] [ bar --bar-h ] [ main 1fr ]
+  Rows:     [ topbar auto ] [ main 1fr ]
 
-  .lcars-nav  → col1 row1 (buttons)   ┐
-  .lcars-sidebar-rail → col1 rows2-3  ┘ together = one pillar (a6)
-  .lcars-header → col2 row1
-  .lcars-topbar → col2 row2 (elbow sweeps out of the pillar)
-  .lcars-main   → col2 row3 (concave scoop at its top-left)
+  .lcars-topbar        → row1, spans both columns; one thick segmented bar
+                         with the centred title in an interrupted gap
+  .lcars-sidebar-nav   → col1 row2, one continuous pillar; buttons top,
+                         deco anchored to its bottom
+  .lcars-main          → col2 row2, the only scrollable area
 */
 .lcars-frame {
 	display: grid;
 	grid-template-columns: var(--lfw) minmax(0, 1fr);
-	grid-template-rows: auto var(--bar-h) 1fr;
+	grid-template-rows: auto 1fr;
 	grid-template-areas:
-		"nav   title"
-		"rail  bar"
-		"rail  main";
+		"topbar topbar"
+		"pillar main";
 	column-gap: 0;
-	row-gap: 0;
+	row-gap: var(--gap);
 	max-width: 1200px;
 	margin: 0 auto;
-	min-height: calc(100vh - 2.25rem);
+	height: 100%;
+	min-height: 0;
+	overflow: hidden;
 }
 
 .lcars-sidebar {
@@ -113,37 +116,21 @@ a:hover { color: var(--lcars-a2); }
 }
 
 .lcars-sidebar-nav {
-	grid-area: nav;
+	grid-area: pillar;
 	display: flex;
 	flex-direction: column;
 	background: var(--lcars-frame-color);
 	border-top-left-radius: var(--outer-r);
+	border-bottom-left-radius: var(--outer-r);
 	overflow: hidden;
 }
 
-/* rail = lower pillar, spans bar + main rows */
-.lcars-sidebar-fill,
 .lcars-sidebar-deco {
-	grid-column: 1;
-}
-
-.lcars-sidebar-fill {
-	grid-row: 2 / 4;
-	background: var(--lcars-frame-color);
-	border-bottom-left-radius: var(--outer-r);
-	position: relative;
-	z-index: 0;
-}
-
-.lcars-sidebar-deco {
-	grid-row: 3;
-	align-self: end;
+	margin-top: auto;
 	display: flex;
 	flex-direction: column;
-	background: var(--lcars-frame-color);
 	border-bottom-left-radius: var(--outer-r);
 	overflow: hidden;
-	z-index: 1;
 }
 
 .lcars-nav-btn {
@@ -189,30 +176,73 @@ a:hover { color: var(--lcars-a2); }
 
 .lcars-sidebar-deco .lcars-nav-btn { border-bottom: 0; border-top: var(--gap) solid var(--lcars-black); min-height: 2.5rem; }
 
-/* —— Header (title) —— */
+/* —— Top bar + centred title —— */
+
+.lcars-topbar {
+	grid-area: topbar;
+	display: flex;
+	align-items: stretch;
+	height: var(--bar-h);
+	overflow: hidden;
+}
+
+.lcars-topbar-segs {
+	display: flex;
+	align-items: stretch;
+	flex: 1;
+	min-width: 0;
+	overflow: hidden;
+	gap: var(--gap);
+}
+
+.lcars-topbar-segs--right {
+	justify-content: flex-end;
+}
+
+.lcars-topbar-seg {
+	height: 100%;
+	flex: 0 0 auto;
+}
+
+.seg--cap-l {
+	width: var(--bar-h);
+	background: var(--lcars-frame-color);
+	border-radius: var(--bar-h) 0 0 var(--bar-h);
+}
+
+.seg--cap-r {
+	width: var(--bar-h);
+	background: var(--lcars-a6);
+	border-radius: 0 var(--bar-h) var(--bar-h) 0;
+}
+
+.seg--a1 { width: 14%; background: var(--lcars-a1); }
+.seg--a5 { width: 22%; background: var(--lcars-a5); }
+.seg--a8 { width: 30%; background: var(--lcars-a8); }
 
 .lcars-header {
-	grid-area: title;
+	flex: 0 1 auto;
 	display: flex;
 	flex-direction: column;
-	justify-content: flex-end;
-	padding: 0 0 0.6rem 1rem;
+	justify-content: center;
+	align-items: center;
+	text-align: center;
+	padding: 0.2rem 1.2rem;
 	min-width: 0;
 }
 
 .lcars-eyebrow {
-	margin: 0 0 0.3rem;
-	font-size: 0.8rem;
+	margin: 0 0 0.15rem;
+	font-size: 0.7rem;
 	letter-spacing: 0.14em;
 	text-transform: uppercase;
-	text-align: right;
 	color: var(--lcars-a8);
 }
 
 .lcars-banner-row {
 	display: flex;
-	align-items: flex-end;
-	justify-content: flex-end;
+	align-items: center;
+	justify-content: center;
 	gap: 1rem;
 	flex-wrap: wrap;
 }
@@ -224,7 +254,6 @@ a:hover { color: var(--lcars-a2); }
 	letter-spacing: 0.02em;
 	line-height: 1;
 	text-transform: uppercase;
-	text-align: right;
 	color: var(--lcars-a5);
 	animation: lcars-title-slide 0.5s cubic-bezier(0.2, 0.8, 0.2, 1);
 }
@@ -236,63 +265,17 @@ a:hover { color: var(--lcars-a2); }
 	align-items: center;
 }
 
-/* —— Elbow bar —— */
-
-.lcars-topbar {
-	grid-area: bar;
-	display: flex;
-	height: var(--bar-h);
-	width: 100%;
-}
-
-.lcars-bar {
-	display: block;
-	height: 100%;
-	flex-shrink: 0;
-}
-
-/* First segment shares the pillar colour → continuous elbow */
-.lcars-bar--elbow {
-	width: 34%;
-	background: var(--lcars-frame-color);
-	border-right: var(--gap) solid var(--lcars-black);
-}
-.lcars-bar--gap1 { width: 4%; background: var(--lcars-a1); border-right: var(--gap) solid var(--lcars-black); }
-.lcars-bar--seg2 { width: 16%; background: var(--lcars-a8); border-right: var(--gap) solid var(--lcars-black); }
-.lcars-bar--seg3 { width: 8%; background: var(--lcars-a1); border-right: var(--gap) solid var(--lcars-black); }
-.lcars-bar--tail { flex: 1; background: var(--lcars-a8); border-radius: 0 999px 999px 0; }
-
-/* —— Main content with concave inner corner —— */
+/* —— Main content —— */
 
 .lcars-main {
 	grid-area: main;
 	min-width: 0;
+	min-height: 0;
+	overflow-y: auto;
 	position: relative;
 	padding: 1.1rem 0 1.25rem 1rem;
 }
 
-/* concave scoop: colour fill + black rounded corner in the crook */
-.lcars-main::before {
-	content: "";
-	position: absolute;
-	left: 0;
-	top: 0;
-	width: var(--scoop);
-	height: var(--scoop);
-	background: var(--lcars-frame-color);
-	z-index: 0;
-}
-.lcars-main::after {
-	content: "";
-	position: absolute;
-	left: 0;
-	top: 0;
-	width: var(--scoop);
-	height: var(--scoop);
-	background: #000;
-	border-top-left-radius: var(--scoop);
-	z-index: 0;
-}
 .lcars-main > * { position: relative; z-index: 1; }
 
 /* —— Mobile: drop pillar, keep bar + pills —— */
@@ -300,26 +283,17 @@ a:hover { color: var(--lcars-a2); }
 @media (max-width: 700px) {
 	.lcars-frame {
 		grid-template-columns: 1fr;
-		grid-template-rows: auto var(--bar-h) 1fr;
+		grid-template-rows: auto 1fr;
 		grid-template-areas:
-			"title"
-			"bar"
+			"topbar"
 			"main";
 	}
 
-	.lcars-sidebar-nav,
-	.lcars-sidebar-fill,
-	.lcars-sidebar-deco { display: none; }
+	.lcars-sidebar-nav { display: none; }
 
-	.lcars-header { padding-left: 0; }
-	.lcars-eyebrow,
-	.lcars-banner { text-align: left; }
-	.lcars-banner-row { justify-content: flex-start; }
-
-	.lcars-bar--elbow { border-radius: 999px 0 0 999px; }
+	.lcars-header { padding: 0.1rem 0.75rem; }
+	.lcars-topbar-segs--right { display: none; }
 	.lcars-main { padding-left: 0; }
-	.lcars-main::before,
-	.lcars-main::after { display: none; }
 	.lcars-main .lcars-mobile-nav { display: flex; }
 }
 
@@ -733,12 +707,27 @@ h2 {
 	color: var(--lcars-text);
 	letter-spacing: 0.03em;
 	text-transform: none;
+	color-scheme: dark;
 }
 
 .form input:focus,
 .form select:focus {
 	outline: none;
 	border-bottom-color: var(--lcars-a5);
+}
+
+.form select option,
+.form select optgroup {
+	background-color: #000;
+	color: var(--lcars-text);
+}
+
+.form select optgroup {
+	color: var(--lcars-text-dim);
+}
+
+.form select optgroup option {
+	color: var(--lcars-text);
 }
 
 .checks {
