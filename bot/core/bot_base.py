@@ -710,9 +710,7 @@ class BaseBot(commands.Bot):
 
             players = self.store.get_all_players(config.guild_id)
             if not players:
-                log.info(
-                    f"[UPDATE] No players to check for guild {config.guild_id}"
-                )
+                log.info(f"[UPDATE] No players to check for guild {config.guild_id}")
                 self._last_update_check[config.guild_id] = now
                 continue
 

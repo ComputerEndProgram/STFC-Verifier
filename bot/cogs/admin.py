@@ -133,7 +133,9 @@ class AdminCog(commands.Cog):
                 if verify_role and verify_role in member.roles:
                     roles_to_remove.append(verify_role)
 
-            alliance_role_id = store.get_user_alliance_role_id(interaction.guild.id, user.id)
+            alliance_role_id = store.get_user_alliance_role_id(
+                interaction.guild.id, user.id
+            )
             if alliance_role_id:
                 alliance_role = guild.get_role(alliance_role_id)
                 if alliance_role and alliance_role in member.roles:
@@ -298,7 +300,9 @@ class AdminCog(commands.Cog):
                 ephemeral=True,
             )
 
-        if store.is_player_id_taken(interaction.guild.id, player_id, exclude_user_id=user.id):
+        if store.is_player_id_taken(
+            interaction.guild.id, player_id, exclude_user_id=user.id
+        ):
             return await interaction.followup.send(
                 "❌ This STFC player account is already linked to another Discord user.",
                 ephemeral=True,
@@ -322,7 +326,9 @@ class AdminCog(commands.Cog):
             feedback.append(f"⚠️ Error setting nickname: {e}")
             log.error(f"[ADMIN] Error setting nickname for {member.id}: {e}")
 
-        store.store_stfc_player(interaction.guild.id, member.id, player_url, player_data)
+        store.store_stfc_player(
+            interaction.guild.id, member.id, player_url, player_data
+        )
         store.delete_pending_wizard_views_by_user(member.id)
 
         try:
